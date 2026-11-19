@@ -37,6 +37,8 @@ function collect(key: string): Promise<ShipsResponse> {
     let lastError: string | null = null;
     let closeInfo: string | null = null;
     let frames = 0;
+    let parseFailures = 0;
+    let sample: string | null = null;
     const finish = (err?: Error) => {
       if (settled) return;
       settled = true;
@@ -57,7 +59,7 @@ function collect(key: string): Promise<ShipsResponse> {
             ? `AISStream rejected the subscription: ${lastError}`
             : frames === 0
               ? `Connected to AISStream but it sent no messages in ${WINDOW_MS / 1000} s.${closeInfo ? ` Socket: ${closeInfo}.` : ''}`
-              : `AISStream sent ${frames} messages, none with a usable position, in ${WINDOW_MS / 1000} s.`;
+              : `AISStream sent ${frames} messages (${parseFailures} did not parse${sample ? `; sample: ${sample}` : ''}), none with a usable position, in ${WINDOW_MS / 1000} s.`;
       resolve({ configured: true, updatedAt: new Date().toISOString(), ships: [...ships.values()], note });
     };
 
@@ -80,10 +82,25 @@ function collect(key: string): Promise<ShipsResponse> {
       setTimeout(() => finish(), WINDOW_MS);
     };
 
+    // Frames can arrive as text, Blob, or ArrayBuffer. String() on a Blob gives "[object Blob]", so decode first.
+    const decode = async (data: unknown): Promise<string> => {
+      if (typeof data === 'string') return data;
+      if (data instanceof Blob) return data.text();
+      if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+      if (ArrayBuffer.isView(data)) return new TextDecoder().decode(data);
+      return String(data);
+    };
+
     ws.onmessage = (ev: MessageEvent) => {
       frames++;
+      decode(ev.data).then(handleText, () => {
+        parseFailures++;
+      });
+    };
+
+    const handleText = (text: string) => {
       try {
-        const msg = JSON.parse(String(ev.data)) as {
+        const msg = JSON.parse(text) as {
           MessageType?: string;
           error?: string;
           MetaData?: { MMSI?: number; ShipName?: string; latitude?: number; longitude?: number };
@@ -112,7 +129,8 @@ function collect(key: string): Promise<ShipsResponse> {
         });
         if (ships.size >= MAX_SHIPS) finish();
       } catch {
-        /* ignore malformed frames */
+        parseFailures++;
+        if (!sample) sample = text.slice(0, 60).replace(/\s+/g, ' ');
       }
     };
 
