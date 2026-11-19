@@ -16,14 +16,16 @@ export function isWeatherLayerKey(v: string): v is WeatherLayerKey {
   return Object.prototype.hasOwnProperty.call(WEATHER_LAYERS, v);
 }
 
-/** One 256 px tile at zoom 2 (x and y in 0..3). Returns PNG bytes. */
-export async function getWeatherTile(layer: WeatherLayerKey, x: number, y: number): Promise<Response> {
+/** One 256 px weather tile (zoom 0..5; x and y in 0..2^z-1). Returns PNG bytes. */
+export async function getWeatherTile(layer: WeatherLayerKey, z: number, x: number, y: number): Promise<Response> {
   const key = process.env.OPENWEATHER_API_KEY;
   if (!key) throw new UpstreamError('weather maps are not configured', 503);
-  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > 3 || y < 0 || y > 3) {
+  if (!Number.isInteger(z) || z < 0 || z > 5) throw new UpstreamError('invalid zoom', 400);
+  const max = 2 ** z - 1;
+  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > max || y < 0 || y > max) {
     throw new UpstreamError('invalid tile', 400);
   }
-  const url = `https://tile.openweathermap.org/map/${WEATHER_LAYERS[layer].id}/2/${x}/${y}.png?appid=${encodeURIComponent(key)}`;
+  const url = `https://tile.openweathermap.org/map/${WEATHER_LAYERS[layer].id}/${z}/${x}/${y}.png?appid=${encodeURIComponent(key)}`;
   const res = await fetchWithTimeout(url, { timeoutMs: 8000 });
   if (!res.ok) throw new UpstreamError(`OpenWeather tile ${res.status}`, 502);
   return new Response(await res.arrayBuffer(), {

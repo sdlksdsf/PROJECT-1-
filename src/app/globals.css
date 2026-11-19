@@ -1707,3 +1707,27 @@ ul {
 .weather-clock {
   bottom: 52px;
 }
+
+/* Flat 2D radar map. Fills the stage like the globe does. */
+.map2d {
+  position: absolute;
+  inset: 0;
+}
+.map2d-canvas {
+  position: absolute;
+  inset: 0;
+  background: var(--globe-bg);
+}
+.map2d .leaflet-control-attribution {
+  font-size: 10px;
+  background: var(--glass);
+  color: var(--muted);
+}
+.map2d .leaflet-control-attribution a {
+  color: var(--muted);
+}
+.map2d .leaflet-control-zoom a {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+}

@@ -4,6 +4,7 @@ export type LeftTab = 'news' | 'markets' | 'weather' | 'disasters' | 'traffic' |
 export type DrawerTab = 'overview' | 'leaders' | 'news' | 'cameras' | 'weather';
 export type Theme = 'dark' | 'light';
 export type WeatherMap = 'off' | 'temp' | 'wind' | 'clouds' | 'precip';
+export type MapMode = 'globe' | 'flat';
 
 export interface Layers {
   conflicts: boolean;
@@ -32,6 +33,7 @@ export interface AppState {
   drawerTab: DrawerTab;
   layers: Layers;
   weatherMap: WeatherMap;
+  mapMode: MapMode;
   focus: Focus | null;
   camera: string | null; // id of the camera open in the viewer
   methodologyOpen: boolean;
@@ -85,6 +87,7 @@ export const appStore = createStore<AppState>({
   drawerTab: 'overview',
   layers: { ...defaultLayers, ...readJson<Partial<Layers>>(LAYERS_KEY, {}) },
   weatherMap: 'off',
+  mapMode: 'globe',
   focus: null,
   camera: null,
   methodologyOpen: false,

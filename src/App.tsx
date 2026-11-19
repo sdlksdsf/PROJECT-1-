@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { CamerasResponse, CountryResponse, DisastersResponse, FlightsResponse, NewsResponse } from '../shared/types';
-import { appStore, openCamera, selectCountry, type Layers, type LeftTab, type Theme, type WeatherMap } from './lib/appState';
+import { appStore, openCamera, selectCountry, type Layers, type LeftTab, type MapMode, type Theme, type WeatherMap } from './lib/appState';
+import { RadarMap } from './components/RadarMap';
 import { useStore } from './lib/store';
 import { useResource } from './lib/useResource';
 import { useShips } from './lib/ships';
@@ -188,6 +189,7 @@ function LayerDock() {
 
 export function App() {
   const theme = useStore(appStore, (s) => s.theme);
+  const mapMode = useStore(appStore, (s) => s.mapMode);
   const leftTab = useStore(appStore, (s) => s.leftTab);
   const leftOpen = useStore(appStore, (s) => s.leftOpen);
   const country = useStore(appStore, (s) => s.country);
@@ -255,6 +257,14 @@ export function App() {
         </div>
         <CountrySearch features={features} />
         <div className="topbar-actions">
+          <button
+            className="btn btn-ghost btn-sm"
+            aria-pressed={mapMode === 'flat'}
+            onClick={() => appStore.set((s) => ({ mapMode: (s.mapMode === 'globe' ? 'flat' : 'globe') as MapMode }))}
+            title="Switch between the 3D globe and a flat 2D radar map"
+          >
+            {mapMode === 'flat' ? '3D globe' : '2D map'}
+          </button>
           <button className="btn btn-ghost btn-sm" aria-pressed={leftOpen} onClick={() => appStore.set((s) => ({ leftOpen: !s.leftOpen }))} title="Toggle panels ( [ )">
             Panels
           </button>
@@ -299,17 +309,23 @@ export function App() {
       </aside>
 
       <main className="stage">
-        <GlobeView
-          features={features}
-          disasters={disasters.data}
-          flights={flights.data}
-          ships={ships.ships}
-          cameras={globeCameras}
-          sidebarOpen={leftOpen}
-          drawerOpen={Boolean(country)}
-        />
+        {mapMode === 'flat' ? (
+          <RadarMap />
+        ) : (
+          <GlobeView
+            features={features}
+            disasters={disasters.data}
+            flights={flights.data}
+            ships={ships.ships}
+            cameras={globeCameras}
+            sidebarOpen={leftOpen}
+            drawerOpen={Boolean(country)}
+          />
+        )}
         <LayerDock />
-        <p className="stage-hint small">Drag to rotate · scroll to zoom · click a country</p>
+        <p className="stage-hint small">
+          {mapMode === 'flat' ? 'Drag to pan · scroll to zoom · radar and weather layers' : 'Drag to rotate · scroll to zoom · click a country'}
+        </p>
       </main>
 
       {country && (
