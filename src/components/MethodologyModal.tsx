@@ -15,7 +15,7 @@ const ENDPOINTS: { path: string; what: string }[] = [
   { path: '/api/markets?symbols=AAPL,^GSPC', what: 'Quotes and 30-day closes (max 40 symbols)' },
   { path: '/api/disasters', what: 'USGS earthquakes (24 h, M2.5+) and NASA EONET events' },
   { path: '/api/flights', what: 'Live aircraft positions (adsb.lol; OpenSky as fallback)' },
-  { path: '/api/radar/frame', what: 'Latest rain radar frame (RainViewer)' },
+  { path: '/api/radar/frames', what: 'Rain radar frames, last 2 hours plus forecast (RainViewer)' },
   { path: '/api/cameras/map', what: 'Worldwide webcam markers (OpenWebcamDB, needs a key)' },
   { path: '/api/camera?id=', what: 'Live view for one camera (stream address or still image)' },
   { path: '/api/weather?lat=…&lon=…', what: 'Current conditions and 3-day forecast (Open-Meteo)' },

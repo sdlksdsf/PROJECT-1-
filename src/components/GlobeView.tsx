@@ -43,6 +43,13 @@ interface GArc {
   color: string;
 }
 
+interface RadarSlot {
+  path: string;
+  time: number; // unix seconds
+  forecast: boolean;
+  tex: THREE.CanvasTexture | null;
+}
+
 interface GLabel {
   lat: number;
   lng: number;
@@ -173,8 +180,8 @@ async function stitchRadar(path: string): Promise<HTMLCanvasElement> {
   await Promise.all(jobs);
   const src = wctx.getImageData(0, 0, 1024, 1024).data;
 
-  const W = 2048;
-  const H = 1024;
+  const W = 1024;
+  const H = 512;
   const out = document.createElement('canvas');
   out.width = W;
   out.height = H;
@@ -210,6 +217,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
   const globeRef = useRef<GlobeInstance | null>(null);
   const featuresRef = useRef<CountryFeature[]>(features);
   const hoveredRef = useRef<string | null>(null);
+  const radarClockRef = useRef<HTMLDivElement>(null);
 
   const theme = useStore(appStore, (s) => s.theme);
   const layers = useStore(appStore, (s) => s.layers);
@@ -394,53 +402,128 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
-  // ---- rain radar (RainViewer, refreshed every 5 minutes) --------------
+  // ---- rain radar: last 2 hours animated, forecast frames after, refreshed every minute ----
   useEffect(() => {
     const g = globeRef.current;
     if (!g || !layers.rain) return;
     const scene = g.scene();
+    const clock = radarClockRef.current;
     let mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null = null;
     let cancelled = false;
-    let timer: number | undefined;
+    let refreshTimer: number | undefined;
+    let playTimer: number | undefined;
+    let slots: RadarSlot[] = [];
+    let pos = -1;
+    let hold = 0;
 
-    const attach = (canvas: HTMLCanvasElement) => {
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      if (!mesh) {
-        mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(GLOBE_R * 1.004, 128, 64),
-          new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthWrite: false }),
-        );
-        mesh.renderOrder = 2;
-        scene.add(mesh);
-      }
-      mesh.material.map?.dispose();
-      mesh.material.map = tex;
-      mesh.material.needsUpdate = true;
+    const ensureMesh = () => {
+      if (mesh) return mesh;
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(GLOBE_R * 1.004, 128, 64),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthWrite: false }),
+      );
+      mesh.renderOrder = 2;
+      scene.add(mesh);
+      return mesh;
     };
 
-    const load = async () => {
+    const showClock = (slot: RadarSlot) => {
+      if (!clock) return;
+      const time = new Date(slot.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      if (slot.forecast) {
+        clock.textContent = `Rain forecast ${time}`;
+        return;
+      }
+      const ageMin = Math.max(0, Math.round((Date.now() / 1000 - slot.time) / 60));
+      clock.textContent = `Rain radar ${time} · ${ageMin < 1 ? 'just now' : `${ageMin} min ago`}`;
+    };
+
+    const showSlot = (slot: RadarSlot) => {
+      if (!slot.tex) return;
+      const m = ensureMesh();
+      m.material.map = slot.tex;
+      m.material.needsUpdate = true;
+      showClock(slot);
+    };
+
+    const ready = () => slots.filter((s) => s.tex !== null);
+
+    // Play the ready frames in order; hold the newest one for about two seconds.
+    const step = () => {
+      const frames = ready();
+      if (frames.length === 0) return;
+      if (hold > 0) {
+        hold--;
+        return;
+      }
+      pos = (pos + 1) % frames.length;
+      showSlot(frames[pos]);
+      if (pos === frames.length - 1) hold = 4;
+    };
+    const startPlay = () => {
+      if (playTimer === undefined && !document.hidden) playTimer = window.setInterval(step, 500);
+    };
+    const stopPlay = () => {
+      if (playTimer !== undefined) window.clearInterval(playTimer);
+      playTimer = undefined;
+    };
+    const onVisibility = () => (document.hidden ? stopPlay() : startPlay());
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const sync = async () => {
       try {
-        const frame = await fetchJson<{ path: string }>('/api/radar/frame');
-        const canvas = await stitchRadar(frame.path);
-        if (!cancelled) attach(canvas);
+        const list = await fetchJson<{ frames: { time: number; path: string; forecast: boolean }[] }>('/api/radar/frames');
+        if (cancelled) return;
+        const known = new Map(slots.map((s) => [s.path, s]));
+        const next: RadarSlot[] = list.frames.map(
+          (f) => known.get(f.path) ?? { path: f.path, time: f.time, forecast: f.forecast, tex: null },
+        );
+        for (const s of slots) {
+          if (!next.includes(s)) s.tex?.dispose();
+        }
+        slots = next;
+        // Load missing frames newest first, so the current picture appears first.
+        for (let i = slots.length - 1; i >= 0 && !cancelled; i--) {
+          const slot = slots[i];
+          if (slot.tex) continue;
+          try {
+            const canvas = await stitchRadar(slot.path);
+            if (cancelled || !slots.includes(slot)) continue;
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            slot.tex = tex;
+            if (i === slots.length - 1 && pos < 0) {
+              pos = ready().length - 1;
+              showSlot(slot);
+            }
+          } catch {
+            // Skip a frame that fails; it is tried again at the next refresh.
+          }
+          // Let the browser paint between frames so the globe keeps moving.
+          await new Promise((r) => window.setTimeout(r, 0));
+        }
+        startPlay();
       } catch {
-        // Keep the previous frame and try again later.
+        // Keep showing the frames we have.
       }
-      if (!cancelled) timer = window.setTimeout(load, 5 * 60e3);
+      if (!cancelled) refreshTimer = window.setTimeout(sync, 60e3);
     };
-    load();
+    sync();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      window.clearTimeout(refreshTimer);
+      stopPlay();
+      document.removeEventListener('visibilitychange', onVisibility);
+      for (const s of slots) s.tex?.dispose();
+      slots = [];
       if (mesh) {
         scene.remove(mesh);
         mesh.geometry.dispose();
-        mesh.material.map?.dispose();
         mesh.material.dispose();
         mesh = null;
       }
+      if (clock) clock.textContent = '';
     };
   }, [layers.rain]);
 
@@ -628,6 +711,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
     <div className="globe-wrap" ref={wrapRef}>
       <div ref={containerRef} className="globe-canvas" aria-label="Interactive 3D globe. Click a country to open its statistics." role="application" />
       {layers.radar && <div className="radar-sweep" aria-hidden="true" />}
+      <div ref={radarClockRef} className="radar-clock" hidden={!layers.rain} aria-live="off" />
     </div>
   );
 }
