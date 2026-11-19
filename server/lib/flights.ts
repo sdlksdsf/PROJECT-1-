@@ -34,7 +34,7 @@ async function bearer(): Promise<string | null> {
   if (tokenCache && tokenCache.exp > Date.now()) return tokenCache.token;
   const res = await fetchWithTimeout(TOKEN_URL, {
     method: 'POST',
-    timeoutMs: 8000,
+    timeoutMs: 15000,
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'client_credentials', client_id: id, client_secret: secret }).toString(),
   });
@@ -47,10 +47,11 @@ async function bearer(): Promise<string | null> {
 export function getFlights(): Promise<FlightsResponse> {
   return remember('flights', 120e3, async () => {
     try {
-      const token = await bearer();
+      // If the token call fails, fall back to anonymous access (smaller daily credit budget) instead of failing the panel.
+      const token = await bearer().catch(() => null);
       const data = await getJson<{ time: number; states: StateVector[] | null }>(
         'https://opensky-network.org/api/states/all',
-        { timeoutMs: 12000, headers: token ? { authorization: `Bearer ${token}` } : {} },
+        { timeoutMs: 20000, headers: token ? { authorization: `Bearer ${token}` } : {} },
       );
       const states = data.states ?? [];
       const airborne: Aircraft[] = [];

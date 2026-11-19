@@ -38,7 +38,7 @@ export function getCountryNews(iso3: string): Promise<NewsResponse> {
         timespan: '3d',
         format: 'json',
       })}`,
-      { timeoutMs: 9000 },
+      { timeoutMs: 15000 },
     );
     const articles: RawArticle[] = (data.articles ?? [])
       .filter((a) => a.url && a.title)

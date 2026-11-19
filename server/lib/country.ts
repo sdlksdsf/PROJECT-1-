@@ -1,23 +1,10 @@
-// Country profile: REST Countries (basics), World Bank indicators (economy, governance,
-// oil rents), and Wikidata (current head of state / government).
+// Country profile: World Bank country metadata (name, capital, coordinates), World Bank indicators
+// (economy, governance, population, area), and Wikidata (current head of state / government).
+// REST Countries v3.1 was retired (it now answers success:false), so it is no longer used.
 import { getJson, UpstreamError } from './http';
 import { remember } from './cache';
+import countryNames from './countryNames.json';
 import type { CountryResponse, Indicator, Leader } from '../../shared/types';
-
-interface RestCountry {
-  cca2: string;
-  name: { common: string; official: string };
-  capital?: string[];
-  capitalInfo?: { latlng?: [number, number] };
-  region?: string;
-  subregion?: string;
-  population?: number;
-  area?: number;
-  languages?: Record<string, string>;
-  currencies?: Record<string, { name: string; symbol?: string }>;
-  flags?: { png?: string; svg?: string };
-  flag?: string;
-}
 
 const INDICATORS: { key: string; code: string; label: string; unit: string; note: string }[] = [
   {
@@ -30,13 +17,22 @@ const INDICATORS: { key: string; code: string; label: string; unit: string; note
   { key: 'gdp', code: 'NY.GDP.MKTP.CD', label: 'GDP (current US$)', unit: 'US$', note: 'World Bank, current US dollars.' },
   { key: 'gdpPc', code: 'NY.GDP.PCAP.CD', label: 'GDP per capita (US$)', unit: 'US$', note: 'World Bank, current US dollars.' },
   { key: 'unemployment', code: 'SL.UEM.TOTL.ZS', label: 'Unemployment (% of labour force)', unit: '%', note: 'ILO estimate via World Bank.' },
-  { key: 'oilRents', code: 'NY.GDP.PETR.RT.ZS', label: 'Oil rents (% of GDP)', unit: '%', note: 'Value of oil production above extraction cost, as % of GDP. Barrels-per-day needs a US EIA key (not included).' },
+  { key: 'oilRents', code: 'NY.GDP.PETR.RT.ZS', label: 'Oil rents (% of GDP)', unit: '%', note: 'Value of oil production above extraction cost, as % of GDP. Barrels-per-day comes from the US EIA reserves figure.' },
   { key: 'lifeExp', code: 'SP.DYN.LE00.IN', label: 'Life expectancy (years)', unit: 'years', note: 'World Bank / UN WPP.' },
 ];
 
 interface WbPoint {
   date: string;
   value: number | null;
+}
+
+interface WbCountryMeta {
+  iso2Code: string;
+  name: string;
+  region?: { value?: string };
+  capitalCity?: string;
+  latitude?: string;
+  longitude?: string;
 }
 
 async function wbIndicator(iso3: string, code: string): Promise<{ value: number | null; year: number | null }> {
@@ -51,6 +47,13 @@ async function wbIndicator(iso3: string, code: string): Promise<{ value: number 
   } catch {
     return { value: null, year: null };
   }
+}
+
+async function wbCountryMeta(iso3: string): Promise<WbCountryMeta | null> {
+  const data = await getJson<[unknown, WbCountryMeta[] | null]>(`https://api.worldbank.org/v2/country/${iso3}?format=json`, {
+    timeoutMs: 7000,
+  });
+  return data[1]?.[0] ?? null;
 }
 
 interface SparqlBinding {
@@ -99,16 +102,16 @@ export function getCountry(iso3: string): Promise<CountryResponse> {
   if (!/^[A-Z]{3}$/.test(code)) throw new UpstreamError('Country code must be ISO alpha-3, e.g. PAK', 400);
   return remember(`country:${code}`, 6 * 3600e3, async () => {
     const notes: string[] = [];
-    let base: RestCountry | null = null;
-    try {
-      const arr = await getJson<RestCountry[]>(`https://restcountries.com/v3.1/alpha/${code}`, { timeoutMs: 7000 });
-      base = arr[0] ?? null;
-    } catch (err) {
-      notes.push(`Basic profile unavailable: ${(err as Error).message}`);
-    }
+    const localNames = (countryNames as { iso3: string; names: string[] }[]).find((c) => c.iso3 === code)?.names ?? [];
 
-    const [wb, leaders] = await Promise.all([
+    const [meta, wb, population, area, leaders] = await Promise.all([
+      wbCountryMeta(code).catch((err: Error) => {
+        notes.push(`Basic profile unavailable: ${err.message}`);
+        return null;
+      }),
       Promise.all(INDICATORS.map((i) => wbIndicator(code, i.code))),
+      wbIndicator(code, 'SP.POP.TOTL'),
+      wbIndicator(code, 'AG.SRF.TOTL.K2'),
       wikidataLeaders(code).catch((err: Error) => {
         notes.push(`Leaders unavailable: ${err.message}`);
         return [] as Leader[];
@@ -127,22 +130,24 @@ export function getCountry(iso3: string): Promise<CountryResponse> {
       notes.push('World Bank indicators have no data for this code (common for disputed or non-UN territories).');
     }
 
-    const name = base?.name.common ?? code;
-    const capLatLng = base?.capitalInfo?.latlng;
+    const lat = Number(meta?.latitude);
+    const lon = Number(meta?.longitude);
+    const hasCapital = Boolean(meta?.latitude && meta?.longitude) && Number.isFinite(lat) && Number.isFinite(lon);
+    const name = meta?.name ?? localNames[0] ?? code;
     return {
       iso3: code,
-      cca2: base?.cca2 ?? null,
+      cca2: meta?.iso2Code ?? null,
       name,
-      official: base?.name.official ?? null,
-      capital: base?.capital?.[0] ?? null,
-      capitalLatLng: capLatLng && capLatLng.length === 2 ? [capLatLng[0], capLatLng[1]] : null,
-      region: base?.region ?? null,
-      subregion: base?.subregion ?? null,
-      population: base?.population ?? null,
-      area: base?.area ?? null,
-      languages: Object.values(base?.languages ?? {}),
-      currencies: Object.values(base?.currencies ?? {}).map((c) => (c.symbol ? `${c.name} (${c.symbol})` : c.name)),
-      flag: base?.flags?.svg ?? base?.flags?.png ?? null,
+      official: null,
+      capital: meta?.capitalCity || null,
+      capitalLatLng: hasCapital ? [lat, lon] : null,
+      region: meta?.region?.value ?? null,
+      subregion: null,
+      population: population.value,
+      area: area.value,
+      languages: [],
+      currencies: [],
+      flag: null,
       indicators,
       leaders,
       notes,

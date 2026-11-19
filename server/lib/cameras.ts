@@ -62,10 +62,17 @@ async function fromWindy(code: string, key: string): Promise<Camera[]> {
 
 async function fromWebcamDb(code: string, key: string): Promise<Camera[]> {
   // Country path takes the two-letter ISO code (e.g. /countries/PK). Lists are paginated under `data`.
-  const data = await getJson<{ data?: WebcamDbItem[] | { webcams?: WebcamDbItem[] } }>(
-    `https://openwebcamdb.com/api/v1/countries/${code}?per_page=24`,
-    { timeoutMs: 8000, headers: { authorization: `Bearer ${key}` } },
-  );
+  let data: { data?: WebcamDbItem[] | { webcams?: WebcamDbItem[] } };
+  try {
+    data = await getJson<{ data?: WebcamDbItem[] | { webcams?: WebcamDbItem[] } }>(
+      `https://openwebcamdb.com/api/v1/countries/${code}?per_page=24`,
+      { timeoutMs: 8000, headers: { authorization: `Bearer ${key}` } },
+    );
+  } catch (err) {
+    // 404 = this country has no webcams in the directory; that is an empty result, not an error.
+    if (err instanceof UpstreamError && err.status === 404) return [];
+    throw err;
+  }
   const items = Array.isArray(data.data) ? data.data : (data.data?.webcams ?? []);
   return items.map((w) => ({
     id: `owdb-${w.slug}`,
