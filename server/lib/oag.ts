@@ -96,7 +96,13 @@ export function oagConnections(from: string, to: string, date: string): Promise<
       }));
       return { configured: true, options, source: 'OAG Flight Info Connections' };
     } catch (err) {
-      const message = err instanceof UpstreamError ? err.message : 'Connections lookup failed';
+      // A 404 means the request path is not an OAG operation. The Connections path has not been confirmed yet.
+      const notFound = err instanceof UpstreamError && err.status === 404;
+      const message = notFound
+        ? 'OAG did not recognise the connections request (404). The connections path still needs to be confirmed against the OAG portal.'
+        : err instanceof UpstreamError
+          ? err.message
+          : 'Connections lookup failed';
       return { configured: true, options: [], message };
     }
   });

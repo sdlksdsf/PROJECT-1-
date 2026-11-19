@@ -52,7 +52,9 @@ function aviationStack(key: string, code: string): Promise<FlightStatusResponse>
         { timeoutMs: 8000 },
       );
       if (data.error) throw new UpstreamError(data.error.message ?? 'AviationStack error', 502);
-      const flights: FlightStatus[] = (data.data ?? []).map((f) => ({
+      // The API can return other flights in the same response, so keep only the number that was asked for.
+      const matching = (data.data ?? []).filter((f) => (f.flight?.iata ?? '').toUpperCase() === code);
+      const flights: FlightStatus[] = matching.map((f) => ({
         flight: f.flight?.iata ?? code,
         airline: f.airline?.name ?? null,
         date: f.flight_date ?? null,
@@ -93,7 +95,7 @@ export async function getFlightStatus(flight: string): Promise<FlightStatusRespo
     const as = await aviationStack(asKey, code);
     if (as.flights.length > 0) return as;
     // Neither source found the flight: report the most useful message.
-    if (oag) return { ...as, message: as.message ?? `No scheduled flight found for ${code} today.`, source: as.source };
+    if (oag) return { ...as, message: as.message ?? oag.message ?? `No scheduled flight found for ${code} today.`, source: as.source };
     return as;
   }
 
