@@ -73,12 +73,19 @@ async function fetchAdsbHub(lat: number, lon: number): Promise<AdsbAircraft[]> {
 }
 
 async function fromAdsbLol(): Promise<FlightsResponse> {
-  const settled = await Promise.allSettled(ADSB_HUBS.map(([lat, lon]) => fetchAdsbHub(lat, lon)));
+  // Query the hubs in small batches so one request burst does not trip the provider's rate limit.
+  const settled: PromiseSettledResult<AdsbAircraft[]>[] = [];
+  for (let i = 0; i < ADSB_HUBS.length; i += 6) {
+    const batch = ADSB_HUBS.slice(i, i + 6);
+    settled.push(...(await Promise.allSettled(batch.map(([lat, lon]) => fetchAdsbHub(lat, lon)))));
+  }
   const seen = new Map<string, Aircraft>();
   let failed = 0;
+  let firstError = '';
   for (const r of settled) {
     if (r.status === 'rejected') {
       failed++;
+      if (!firstError) firstError = (r.reason as Error)?.message ?? 'unknown';
       continue;
     }
     for (const a of r.value) {
@@ -98,7 +105,7 @@ async function fromAdsbLol(): Promise<FlightsResponse> {
       });
     }
   }
-  if (seen.size === 0 && failed === ADSB_HUBS.length) throw new UpstreamError('adsb.lol unreachable', 502);
+  if (seen.size === 0 && failed === ADSB_HUBS.length) throw new UpstreamError(`adsb.lol: ${firstError}`, 502);
   const aircraft = [...seen.values()].slice(0, MAX_AIRCRAFT);
   return {
     source: 'adsb.lol',
