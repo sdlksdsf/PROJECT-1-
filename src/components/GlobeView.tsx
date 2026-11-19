@@ -160,6 +160,37 @@ function loadTile(url: string): Promise<HTMLImageElement> {
   });
 }
 
+
+const RADAR_W = 1024;
+const RADAR_H = 512;
+let radarGridCache: { W: number; H: number; rowToSrc: Int32Array; colToSrc: Int32Array } | null = null;
+
+/** Lookup tables from output pixels to source pixels, computed once (the Mercator maths is the costly part). */
+function radarGrid() {
+  if (radarGridCache) return radarGridCache;
+  const W = RADAR_W;
+  const H = RADAR_H;
+  const rowToSrc = new Int32Array(H);
+  const colToSrc = new Int32Array(W);
+  const MERC_LIMIT = 85.0511;
+  for (let row = 0; row < H; row++) {
+    const lat = 90 - ((row + 0.5) / H) * 180;
+    if (Math.abs(lat) > MERC_LIMIT) {
+      rowToSrc[row] = -1;
+      continue;
+    }
+    const rad = (lat * Math.PI) / 180;
+    const my = ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 1024;
+    rowToSrc[row] = Math.min(1023, Math.max(0, Math.floor(my)));
+  }
+  for (let col = 0; col < W; col++) {
+    const lng = ((col + 0.5) / W) * 360 - 180;
+    colToSrc[col] = Math.min(1023, Math.max(0, Math.floor(((lng + 180) / 360) * 1024)));
+  }
+  radarGridCache = { W, H, rowToSrc, colToSrc };
+  return radarGridCache;
+}
+
 /**
  * Builds an equirectangular (longitude/latitude) image of one radar frame.
  * RainViewer tiles are Web Mercator, so 16 zoom-2 tiles are joined and re-sampled onto the globe's grid.
@@ -179,33 +210,22 @@ async function stitchRadar(path: string): Promise<HTMLCanvasElement> {
   }
   await Promise.all(jobs);
   const src = wctx.getImageData(0, 0, 1024, 1024).data;
-
-  const W = 1024;
-  const H = 512;
+  const { W, H, rowToSrc, colToSrc } = radarGrid();
   const out = document.createElement('canvas');
   out.width = W;
   out.height = H;
   const octx = out.getContext('2d');
   if (!octx) throw new Error('no canvas');
   const img = octx.createImageData(W, H);
-  const d = img.data;
-  const MERC_LIMIT = 85.0511;
+  // Copy whole pixels (4 bytes) at a time; the lookup tables were computed once.
+  const src32 = new Uint32Array(src.buffer);
+  const dst32 = new Uint32Array(img.data.buffer);
   for (let row = 0; row < H; row++) {
-    const lat = 90 - ((row + 0.5) / H) * 180;
-    if (Math.abs(lat) > MERC_LIMIT) continue; // poles have no radar coverage: leave transparent
-    const rad = (lat * Math.PI) / 180;
-    const my = ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 1024;
-    const sy = Math.min(1023, Math.max(0, Math.floor(my)));
-    for (let col = 0; col < W; col++) {
-      const lng = ((col + 0.5) / W) * 360 - 180;
-      const sx = Math.min(1023, Math.max(0, Math.floor(((lng + 180) / 360) * 1024)));
-      const si = (sy * 1024 + sx) * 4;
-      const di = (row * W + col) * 4;
-      d[di] = src[si];
-      d[di + 1] = src[si + 1];
-      d[di + 2] = src[si + 2];
-      d[di + 3] = src[si + 3];
-    }
+    const sy = rowToSrc[row];
+    const dRow = row * W;
+    if (sy < 0) continue; // poles have no radar coverage: leave transparent
+    const sRow = sy * 1024;
+    for (let col = 0; col < W; col++) dst32[dRow + col] = src32[sRow + colToSrc[col]];
   }
   octx.putImageData(img, 0, 0);
   return out;
