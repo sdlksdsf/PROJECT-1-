@@ -1,7 +1,7 @@
 // Proved crude-oil reserves per country from the US EIA International Energy Data (free key: EIA_API_KEY).
 // The EIA v2 facet lists are read at runtime so the series IDs are not hard-coded, and then
 // matched to the country by name. This matches the EIA labels, not a guessed ID.
-import { getJson } from './http';
+import { getJson, UpstreamError } from './http';
 import { remember } from './cache';
 import countryNames from './countryNames.json';
 import type { OilResponse } from '../../shared/types';
@@ -18,7 +18,10 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z]/g, '');
 function facets(key: string, facet: string): Promise<Facet[]> {
   return remember(`eia-facet:${facet}`, 24 * 3600e3, async () => {
     const data = await getJson<{ response?: { facets?: Facet[] } }>(`${BASE}/facet/${facet}?api_key=${key}`, { timeoutMs: 10000 });
-    return data.response?.facets ?? [];
+    const list = data.response?.facets ?? [];
+    // An empty list is treated as a failure so it is not cached for 24 hours.
+    if (list.length === 0) throw new UpstreamError(`EIA facet list "${facet}" came back empty`, 502);
+    return list;
   });
 }
 
@@ -37,11 +40,25 @@ export function getOilReserves(iso3: string): Promise<OilResponse> {
   }
   const code = iso3.toUpperCase();
   return remember(`oil:${code}`, 24 * 3600e3, async () => {
-    const [products, activities, regions] = await Promise.all([
-      facets(key, 'productId'),
-      facets(key, 'activityId'),
-      facets(key, 'countryRegionId'),
-    ]);
+    let products: Facet[];
+    let activities: Facet[];
+    let regions: Facet[];
+    try {
+      [products, activities, regions] = await Promise.all([
+        facets(key, 'productId'),
+        facets(key, 'activityId'),
+        facets(key, 'countryRegionId'),
+      ]);
+    } catch (err) {
+      return {
+        configured: true,
+        value: null,
+        year: null,
+        unit: null,
+        updatedAt,
+        message: `EIA could not be reached: ${(err as Error).message}`,
+      };
+    }
     const product = products.find((f) => /crude oil/i.test(f.name) && /condensate/i.test(f.name)) ?? products.find((f) => /crude oil/i.test(f.name));
     const activity = activities.find((f) => /proved reserves|reserves/i.test(f.name));
     const names = (countryNames as { iso3: string; names: string[] }[]).find((c) => c.iso3 === code)?.names ?? [];
@@ -54,7 +71,13 @@ export function getOilReserves(iso3: string): Promise<OilResponse> {
         year: null,
         unit: null,
         updatedAt,
-        message: 'EIA International data has no matching proved-reserves series for this country.',
+        message: `EIA lists ${products.length} products, ${activities.length} measures and ${regions.length} countries. Not matched: ${[
+          !product && 'crude-oil product',
+          !activity && 'proved-reserves measure',
+          !region && `country "${names[0] ?? code}"`,
+        ]
+          .filter(Boolean)
+          .join(', ')}.`,
       };
     }
     const params = new URLSearchParams({

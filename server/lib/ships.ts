@@ -34,6 +34,7 @@ function collect(key: string): Promise<ShipsResponse> {
       return;
     }
 
+    let lastError: string | null = null;
     const finish = (err?: Error) => {
       if (settled) return;
       settled = true;
@@ -43,8 +44,8 @@ function collect(key: string): Promise<ShipsResponse> {
       } catch {
         /* already closed */
       }
-      if (ships.size === 0 && err) {
-        reject(err);
+      if (ships.size === 0 && (err || lastError)) {
+        reject(err ?? new UpstreamError(`AISStream: ${lastError}`, 502));
         return;
       }
       resolve({ configured: true, updatedAt: new Date().toISOString(), ships: [...ships.values()] });
@@ -73,9 +74,14 @@ function collect(key: string): Promise<ShipsResponse> {
       try {
         const msg = JSON.parse(String(ev.data)) as {
           MessageType?: string;
+          error?: string;
           MetaData?: { MMSI?: number; ShipName?: string; latitude?: number; longitude?: number };
           Message?: { PositionReport?: { UserID?: number; Latitude?: number; Longitude?: number; Sog?: number; Cog?: number } };
         };
+        if (msg.error) {
+          lastError = msg.error;
+          return;
+        }
         if (msg.MessageType !== 'PositionReport') return;
         const p = msg.Message?.PositionReport;
         const meta = msg.MetaData;
