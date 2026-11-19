@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import Globe, { type GlobeInstance } from 'globe.gl';
 import * as THREE from 'three';
-import { appStore, openCamera, selectCountry } from '../lib/appState';
+import { appStore, openCamera, selectCountry, type Theme, type WeatherMap } from '../lib/appState';
 import { useStore } from '../lib/store';
 import { escapeHtml, timeAgo } from '../lib/format';
 import { CONFLICTS } from '../data/conflicts';
@@ -192,10 +192,10 @@ function radarGrid() {
 }
 
 /**
- * Builds an equirectangular (longitude/latitude) image of one radar frame.
- * RainViewer tiles are Web Mercator, so 16 zoom-2 tiles are joined and re-sampled onto the globe's grid.
+ * Builds an equirectangular (longitude/latitude) image from 16 Web Mercator zoom-2 tiles
+ * (RainViewer radar or OpenWeather maps), re-sampled onto the globe's grid.
  */
-async function stitchRadar(path: string): Promise<HTMLCanvasElement> {
+async function stitchTiles(tileUrl: (x: number, y: number) => string): Promise<HTMLCanvasElement> {
   const world = document.createElement('canvas');
   world.width = 1024;
   world.height = 1024;
@@ -204,8 +204,7 @@ async function stitchRadar(path: string): Promise<HTMLCanvasElement> {
   const jobs: Promise<void>[] = [];
   for (let x = 0; x < 4; x++) {
     for (let y = 0; y < 4; y++) {
-      const url = `/api/radar/tile?p=${encodeURIComponent(path)}&x=${x}&y=${y}`;
-      jobs.push(loadTile(url).then((img) => wctx.drawImage(img, x * 256, y * 256)));
+      jobs.push(loadTile(tileUrl(x, y)).then((img) => wctx.drawImage(img, x * 256, y * 256)));
     }
   }
   await Promise.all(jobs);
@@ -231,6 +230,23 @@ async function stitchRadar(path: string): Promise<HTMLCanvasElement> {
   return out;
 }
 
+function stitchRadar(path: string): Promise<HTMLCanvasElement> {
+  return stitchTiles((x, y) => `/api/radar/tile?p=${encodeURIComponent(path)}&x=${x}&y=${y}`);
+}
+
+const WEATHER_NAMES: Record<Exclude<WeatherMap, 'off'>, string> = {
+  temp: 'Temperature',
+  wind: 'Wind speed',
+  clouds: 'Clouds',
+  precip: 'Precipitation & snow',
+};
+
+// Overlay opacity per theme: the dark globe needs stronger colours, the light globe needs more contrast.
+const OVERLAY_OPACITY: Record<'rain' | 'weather', Record<Theme, number>> = {
+  rain: { dark: 0.6, light: 0.85 },
+  weather: { dark: 0.5, light: 0.7 },
+};
+
 function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarOpen, drawerOpen }: GlobeViewProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -238,6 +254,9 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
   const featuresRef = useRef<CountryFeature[]>(features);
   const hoveredRef = useRef<string | null>(null);
   const radarClockRef = useRef<HTMLDivElement>(null);
+  const weatherLabelRef = useRef<HTMLDivElement>(null);
+  // Materials of the rain and weather overlays, so a theme change can restyle them without a reload.
+  const overlayMaterialsRef = useRef(new Map<THREE.MeshBasicMaterial, 'rain' | 'weather'>());
 
   const theme = useStore(appStore, (s) => s.theme);
   const layers = useStore(appStore, (s) => s.layers);
@@ -419,6 +438,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
       .polygonStrokeColor(() => t.stroke)
       .backgroundImageUrl(t.background);
     paintPolygons();
+    for (const [material, kind] of overlayMaterialsRef.current) material.opacity = OVERLAY_OPACITY[kind][theme];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
@@ -438,12 +458,15 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
 
     const ensureMesh = () => {
       if (mesh) return mesh;
-      mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(GLOBE_R * 1.004, 128, 64),
-        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthWrite: false }),
-      );
+      const material = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: OVERLAY_OPACITY.rain[appStore.get().theme],
+        depthWrite: false,
+      });
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(GLOBE_R * 1.004, 128, 64), material);
       mesh.renderOrder = 2;
       scene.add(mesh);
+      overlayMaterialsRef.current.set(material, 'rain');
       return mesh;
     };
 
@@ -540,12 +563,66 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
       if (mesh) {
         scene.remove(mesh);
         mesh.geometry.dispose();
+        overlayMaterialsRef.current.delete(mesh.material);
         mesh.material.dispose();
         mesh = null;
       }
       if (clock) clock.textContent = '';
     };
   }, [layers.rain]);
+
+  // ---- weather map: temperature, wind, clouds or precipitation/snow (OpenWeather, reloaded every 10 minutes) ----
+  const weatherMap = useStore(appStore, (s) => s.weatherMap);
+  useEffect(() => {
+    const g = globeRef.current;
+    const label = weatherLabelRef.current;
+    if (!g || weatherMap === 'off') return;
+    const scene = g.scene();
+    const material = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: OVERLAY_OPACITY.weather[appStore.get().theme],
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(GLOBE_R * 1.006, 128, 64), material);
+    mesh.renderOrder = 3;
+    scene.add(mesh);
+    overlayMaterialsRef.current.set(material, 'weather');
+    let tex: THREE.CanvasTexture | null = null;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const load = async () => {
+      try {
+        const canvas = await stitchTiles((x, y) => `/api/weather/tile?layer=${weatherMap}&x=${x}&y=${y}`);
+        if (cancelled) return;
+        const next = new THREE.CanvasTexture(canvas);
+        next.colorSpace = THREE.SRGBColorSpace;
+        const old = tex;
+        tex = next;
+        material.map = next;
+        material.needsUpdate = true;
+        old?.dispose();
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (label) label.textContent = `${WEATHER_NAMES[weatherMap]} · OpenWeather · loaded ${time}`;
+      } catch {
+        if (label && !tex) label.textContent = `${WEATHER_NAMES[weatherMap]} unavailable right now`;
+      }
+      if (!cancelled) timer = window.setTimeout(load, 10 * 60e3);
+    };
+    if (label) label.textContent = `${WEATHER_NAMES[weatherMap]} · loading…`;
+    load();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      scene.remove(mesh);
+      overlayMaterialsRef.current.delete(material);
+      mesh.geometry.dispose();
+      material.dispose();
+      tex?.dispose();
+      if (label) label.textContent = '';
+    };
+  }, [weatherMap]);
 
   // ---- selection, layers that colour polygons ---------------------------
   useEffect(() => {
@@ -732,6 +809,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
       <div ref={containerRef} className="globe-canvas" aria-label="Interactive 3D globe. Click a country to open its statistics." role="application" />
       {layers.radar && <div className="radar-sweep" aria-hidden="true" />}
       <div ref={radarClockRef} className="radar-clock" hidden={!layers.rain} aria-live="off" />
+      <div ref={weatherLabelRef} className="radar-clock weather-clock" hidden={weatherMap === 'off'} aria-live="off" />
     </div>
   );
 }

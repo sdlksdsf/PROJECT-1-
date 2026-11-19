@@ -3,6 +3,7 @@ import { createStore } from './store';
 export type LeftTab = 'news' | 'markets' | 'weather' | 'disasters' | 'traffic' | 'conflicts';
 export type DrawerTab = 'overview' | 'leaders' | 'news' | 'cameras' | 'weather';
 export type Theme = 'dark' | 'light';
+export type WeatherMap = 'off' | 'temp' | 'wind' | 'clouds' | 'precip';
 
 export interface Layers {
   conflicts: boolean;
@@ -30,6 +31,7 @@ export interface AppState {
   country: string | null; // ISO alpha-3
   drawerTab: DrawerTab;
   layers: Layers;
+  weatherMap: WeatherMap;
   focus: Focus | null;
   camera: string | null; // id of the camera open in the viewer
   methodologyOpen: boolean;
@@ -82,6 +84,7 @@ export const appStore = createStore<AppState>({
   country: urlCountry && /^[A-Z]{3}$/.test(urlCountry) ? urlCountry : null,
   drawerTab: 'overview',
   layers: { ...defaultLayers, ...readJson<Partial<Layers>>(LAYERS_KEY, {}) },
+  weatherMap: 'off',
   focus: null,
   camera: null,
   methodologyOpen: false,

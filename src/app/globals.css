@@ -1689,3 +1689,21 @@ ul {
 .radar-clock[hidden] {
   display: none;
 }
+
+/* Weather map: dropdown in the layer panel and its caption above the rain clock. */
+.layer-select label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.layer-select select {
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+.weather-clock {
+  bottom: 52px;
+}

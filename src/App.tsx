@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { CamerasResponse, CountryResponse, DisastersResponse, FlightsResponse, NewsResponse } from '../shared/types';
-import { appStore, openCamera, selectCountry, type Layers, type LeftTab, type Theme } from './lib/appState';
+import { appStore, openCamera, selectCountry, type Layers, type LeftTab, type Theme, type WeatherMap } from './lib/appState';
 import { useStore } from './lib/store';
 import { useResource } from './lib/useResource';
 import { useShips } from './lib/ships';
@@ -137,8 +137,17 @@ function isTyping(target: EventTarget | null): boolean {
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
 }
 
+const WEATHER_MAP_OPTIONS: { value: WeatherMap; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'temp', label: 'Temperature' },
+  { value: 'wind', label: 'Wind speed' },
+  { value: 'clouds', label: 'Clouds' },
+  { value: 'precip', label: 'Precipitation & snow' },
+];
+
 function LayerDock() {
   const layers = useStore(appStore, (s) => s.layers);
+  const weatherMap = useStore(appStore, (s) => s.weatherMap);
   const [open, setOpen] = useState(false);
   const set = (key: keyof Layers, value: boolean) => appStore.set((s) => ({ layers: { ...s.layers, [key]: value } }));
   return (
@@ -156,6 +165,21 @@ function LayerDock() {
               </label>
             </li>
           ))}
+          <li className="layer-select">
+            <label>
+              <span>Weather map</span>
+              <select
+                value={weatherMap}
+                onChange={(e) => appStore.set({ weatherMap: e.target.value as WeatherMap })}
+              >
+                {WEATHER_MAP_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </li>
         </ul>
       )}
     </div>
