@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { appStore, openCamera } from '../lib/appState';
@@ -61,6 +61,9 @@ export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) 
   const weatherMap = useStore(appStore, (s) => s.weatherMap);
   const focus = useStore(appStore, (s) => s.focus);
   const overlayRef = useRef<L.LayerGroup | null>(null);
+  const [measuring, setMeasuring] = useState(false);
+  const [distance, setDistance] = useState<{ km: number; points: number } | null>(null);
+  const measureRef = useRef<{ layer: L.LayerGroup; points: L.LatLng[] } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -102,6 +105,44 @@ export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) 
     const zoom = focus.alt > 2 ? 2 : focus.alt > 1.6 ? 3 : 4;
     map.setView([focus.lat, focus.lng], zoom, { animate: true });
   }, [focus]);
+
+  // Measure distance: click points on the map; the line length is the great-circle distance.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !measuring) return;
+    const layer = L.layerGroup().addTo(map);
+    const state = { layer, points: [] as L.LatLng[] };
+    measureRef.current = state;
+    const draw = () => {
+      layer.clearLayers();
+      state.points.forEach((p) => L.circleMarker(p, { radius: 4, color: '#fbbf24', weight: 2, fillColor: '#fbbf24', fillOpacity: 1 }).addTo(layer));
+      if (state.points.length > 1) L.polyline(state.points, { color: '#fbbf24', weight: 2, dashArray: '6 6' }).addTo(layer);
+      let total = 0;
+      for (let i = 1; i < state.points.length; i++) total += state.points[i - 1].distanceTo(state.points[i]);
+      setDistance({ km: total / 1000, points: state.points.length });
+    };
+    const onClick = (e: L.LeafletMouseEvent) => {
+      state.points.push(e.latlng);
+      draw();
+    };
+    map.on('click', onClick);
+    map.getContainer().style.cursor = 'crosshair';
+    return () => {
+      map.off('click', onClick);
+      map.getContainer().style.cursor = '';
+      layer.remove();
+      measureRef.current = null;
+    };
+  }, [measuring]);
+
+  const clearMeasure = () => {
+    const state = measureRef.current;
+    if (state) {
+      state.points = [];
+      state.layer.clearLayers();
+    }
+    setDistance(null);
+  };
 
   // Swap the basemap when the theme changes.
   useEffect(() => {
@@ -287,6 +328,23 @@ export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) 
   return (
     <div className={`map2d ${theme === 'light' ? 'is-light' : ''}`}>
       <div ref={containerRef} className="map2d-canvas" role="region" aria-label="Flat 2D radar map" />
+      <div className="measure-bar">
+        <button className={`btn btn-glass btn-sm ${measuring ? 'is-on' : ''}`} aria-pressed={measuring} onClick={() => setMeasuring((m) => !m)}>
+          {measuring ? 'Stop measuring' : 'Measure distance'}
+        </button>
+        {measuring && (
+          <span className="small measure-read" aria-live="polite">
+            {distance && distance.points > 1
+              ? `${distance.km.toFixed(1)} km · ${(distance.km * 0.621371).toFixed(1)} mi`
+              : 'Click two or more points on the map'}
+          </span>
+        )}
+        {distance && (
+          <button className="btn btn-ghost btn-sm" onClick={clearMeasure}>
+            Clear
+          </button>
+        )}
+      </div>
       <div ref={clockRef} className="radar-clock" hidden={!rainOn} aria-live="off" />
       <div className="radar-clock weather-clock" hidden={weatherMap === 'off'} aria-live="off">
         {weatherMap === 'off' ? '' : `${WEATHER_NAMES[weatherMap] ?? ''} · OpenWeather`}

@@ -6,6 +6,7 @@ import { useResource } from '../lib/useResource';
 import { fmtDateTime, timeAgo } from '../lib/format';
 import { Empty, ErrorState, FactBadge, Spinner, StandingBadge } from './ui';
 import { CATEGORY_LABELS } from '../../shared/categories';
+import { AiBrief, StoryTimeline } from './NewsInsights';
 
 export const NEWS_REFRESH_MS = 120_000;
 
@@ -230,6 +231,9 @@ export function NewsPanel({ news }: { news: { data: NewsResponse | null; error: 
           Archive
         </button>
       </div>
+
+      {!archiveMode && <AiBrief />}
+      {!archiveMode && news.data && <StoryTimeline stories={news.data.stories} />}
 
       {!archiveMode && (
         <div className="chips" role="tablist" aria-label="News categories">

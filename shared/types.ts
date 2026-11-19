@@ -63,6 +63,15 @@ export interface FeedStatus {
   error?: string;
 }
 
+export interface InsightsResponse {
+  configured: boolean;
+  generatedAt: string | null;
+  model: string | null;
+  brief: string | null;
+  sources: { n: number; title: string; link: string; outlets: number }[];
+  message?: string;
+}
+
 export interface NewsResponse {
   updatedAt: string;
   stories: Story[];
