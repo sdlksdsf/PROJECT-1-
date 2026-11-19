@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { appStore } from '../lib/appState';
+import { appStore, openCamera } from '../lib/appState';
 import { useStore } from '../lib/store';
+import { escapeHtml } from '../lib/format';
+import type { Camera, DisastersResponse, FlightsResponse, ShipPoint } from '../../shared/types';
 
 // Flat 2D map with the rain radar animated over it. Rain is drawn as one tile layer per frame, so the
 // animation only changes opacity and never re-downloads tiles. Weather maps come from the server proxy.
@@ -45,10 +47,19 @@ function frameUrl(path: string) {
   return `https://tilecache.rainviewer.com${path}/256/{z}/{x}/{y}/2/1_1.png`;
 }
 
-export function RadarMap() {
+interface RadarMapProps {
+  flights: FlightsResponse | null;
+  disasters: DisastersResponse | null;
+  ships: ShipPoint[];
+  cameras: Camera[];
+}
+
+export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) {
   const theme = useStore(appStore, (s) => s.theme);
-  const rainOn = useStore(appStore, (s) => s.layers.rain);
+  const layers = useStore(appStore, (s) => s.layers);
+  const rainOn = layers.rain;
   const weatherMap = useStore(appStore, (s) => s.weatherMap);
+  const overlayRef = useRef<L.LayerGroup | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -111,6 +122,63 @@ export function RadarMap() {
   useEffect(() => {
     weatherRef.current?.setOpacity(theme === 'dark' ? 0.55 : 0.7);
   }, [theme]);
+
+  // Aircraft, ships, earthquakes and cameras, drawn on a canvas so a thousand points stay smooth.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const group = L.layerGroup().addTo(map);
+    overlayRef.current = group;
+    return () => {
+      group.remove();
+      overlayRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const group = overlayRef.current;
+    if (!group) return;
+    group.clearLayers();
+    const renderer = L.canvas({ padding: 0.5 });
+    const tipOpts: L.TooltipOptions = { sticky: true, direction: 'top', className: 'map2d-tip', opacity: 1 };
+
+    if (layers.aircraft && flights) {
+      for (const a of flights.aircraft) {
+        const m = L.circleMarker([a.lat, a.lon], { renderer, radius: 2.5, color: '#38bdf8', weight: 0, fillOpacity: 0.9, interactive: true });
+        m.bindTooltip(`<b>${escapeHtml(a.call || 'Aircraft')}</b><br>${escapeHtml(a.country)}${a.alt !== null ? ` · ${Math.round(a.alt * 3.281)} ft` : ''}`, tipOpts);
+        m.addTo(group);
+      }
+    }
+    if (layers.ships) {
+      for (const s of ships) {
+        const m = L.circleMarker([s.lat, s.lng], { renderer, radius: 3, color: '#34d399', weight: 0, fillOpacity: 0.95 });
+        m.bindTooltip(`<b>${escapeHtml(s.name)}</b><br>MMSI ${escapeHtml(s.mmsi)}${s.sog !== null ? ` · ${s.sog.toFixed(1)} kn` : ''}`, tipOpts);
+        m.addTo(group);
+      }
+    }
+    if (layers.disasters && disasters) {
+      for (const q of disasters.quakes) {
+        const m = L.circleMarker([q.lat, q.lon], {
+          renderer,
+          radius: Math.max(3, q.mag * 1.6),
+          color: '#f97316',
+          weight: 1.5,
+          fillOpacity: 0.25,
+        });
+        m.bindTooltip(`<b>M ${q.mag.toFixed(1)}</b> ${escapeHtml(q.place)}`, tipOpts);
+        m.addTo(group);
+      }
+    }
+    if (layers.cameras) {
+      for (const c of cameras) {
+        if (c.lat === null || c.lon === null) continue;
+        const m = L.circleMarker([c.lat, c.lon], { renderer, radius: 5, color: '#f472b6', weight: 2, fillColor: '#f472b6', fillOpacity: 0.5 });
+        m.bindTooltip(`<b>📷 ${escapeHtml(c.title)}</b><br>${escapeHtml(c.city ?? '')} · click to watch`, tipOpts);
+        m.on('click', () => openCamera(c.id));
+        m.addTo(group);
+      }
+    }
+  }, [flights, disasters, ships, cameras, layers.aircraft, layers.ships, layers.disasters, layers.cameras]);
 
   // Rain radar: animated frames, refreshed every minute.
   useEffect(() => {

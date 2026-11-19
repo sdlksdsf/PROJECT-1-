@@ -1731,3 +1731,16 @@ ul {
   color: var(--text);
   border-color: var(--line);
 }
+.map2d-tip {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 6px 8px;
+}
+.map2d-tip::before {
+  display: none;
+}

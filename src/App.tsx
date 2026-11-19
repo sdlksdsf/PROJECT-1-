@@ -310,7 +310,7 @@ export function App() {
 
       <main className="stage">
         {mapMode === 'flat' ? (
-          <RadarMap />
+          <RadarMap flights={flights.data} disasters={disasters.data} ships={ships.ships} cameras={globeCameras} />
         ) : (
           <GlobeView
             features={features}
@@ -324,7 +324,7 @@ export function App() {
         )}
         <LayerDock />
         <p className="stage-hint small">
-          {mapMode === 'flat' ? 'Drag to pan · scroll to zoom · radar and weather layers' : 'Drag to rotate · scroll to zoom · click a country'}
+          {mapMode === 'flat' ? 'Drag to pan · scroll to zoom · click a camera to watch it' : 'Drag to rotate · scroll to zoom · click a country'}
         </p>
       </main>
 
