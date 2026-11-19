@@ -21,6 +21,8 @@ const ENDPOINTS: { path: string; what: string }[] = [
   { path: '/api/country-news?iso3=PAK', what: 'Country-tagged coverage (GDELT), clustered and scored' },
   { path: '/api/cameras?cca2=PK', what: 'Public webcams (needs a Windy key)' },
   { path: '/api/health', what: 'Which optional services are configured' },
+  { path: '/api/ships', what: 'Recent AIS vessel positions (AISStream, needs a key)' },
+  { path: '/api/oil?iso3=…', what: 'Proved crude-oil reserves (US EIA, needs a key)' },
 ];
 
 const SOURCES: { name: string; use: string; license: string }[] = [
@@ -63,8 +65,14 @@ function Health() {
       <li className={data.services.cameras ? 'ok' : 'bad'}>
         <span className="dot" /> Live cameras {data.services.cameras ? 'connected' : 'not connected (needs WINDY_API_KEY)'}
       </li>
-      <li className={import.meta.env.VITE_AISSTREAM_API_KEY ? 'ok' : 'bad'}>
-        <span className="dot" /> Ship tracking {import.meta.env.VITE_AISSTREAM_API_KEY ? 'key set' : 'not connected (needs AISStream key)'}
+      <li className={data.services.ships ? 'ok' : 'bad'}>
+        <span className="dot" /> Ship tracking {data.services.ships ? 'connected' : 'not connected (needs AISSTREAM_API_KEY)'}
+      </li>
+      <li className={data.services.oil ? 'ok' : 'bad'}>
+        <span className="dot" /> Oil reserves {data.services.oil ? 'connected' : 'not connected (needs EIA_API_KEY)'}
+      </li>
+      <li className={data.services.flights ? 'ok' : 'bad'}>
+        <span className="dot" /> Aircraft feed {data.services.flights ? 'registered OpenSky client' : 'anonymous (400 requests/day budget)'}
       </li>
     </ul>
   );

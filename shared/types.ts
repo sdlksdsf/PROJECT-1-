@@ -235,5 +235,33 @@ export interface HealthResponse {
   services: {
     database: boolean;
     cameras: boolean;
+    ships: boolean;
+    oil: boolean;
+    flights: boolean;
   };
+}
+
+export interface ShipPoint {
+  mmsi: string;
+  name: string;
+  lat: number;
+  lng: number;
+  sog: number | null; // speed over ground, knots
+  cog: number | null; // course over ground, degrees
+}
+
+export interface ShipsResponse {
+  configured: boolean;
+  updatedAt: string;
+  ships: ShipPoint[];
+  message?: string;
+}
+
+export interface OilResponse {
+  configured: boolean;
+  updatedAt: string;
+  value: number | null;
+  year: number | null;
+  unit: string | null;
+  message?: string;
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CamerasResponse, CountryResponse, Indicator, Leader, NewsResponse, WeatherResponse } from '../../shared/types';
+import type { CamerasResponse, CountryResponse, Indicator, Leader, NewsResponse, OilResponse, WeatherResponse } from '../../shared/types';
 import { appStore, selectCountry, type DrawerTab } from '../lib/appState';
 import { useStore } from '../lib/store';
 import { useResource } from '../lib/useResource';
@@ -46,7 +46,8 @@ function countryCsv(p: CountryResponse): string {
 
 function OverviewTab({ p }: { p: CountryResponse }) {
   const corruption = p.indicators.find((i) => i.key === 'corruption');
-  const oil = p.indicators.find((i) => i.key === 'oilRents');
+  const reserves = useResource<OilResponse>(`/api/oil?iso3=${p.iso3}`, 86_400_000);
+  const rd = reserves.data;
   const download = () => {
     const blob = new Blob([countryCsv(p)], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -72,6 +73,17 @@ function OverviewTab({ p }: { p: CountryResponse }) {
         <dt>Official name</dt>
         <dd>{p.official ?? '—'}</dd>
       </dl>
+
+      <Section title="Oil reserves">
+        {reserves.loading && !rd && <Spinner label="Checking EIA" />}
+        {reserves.error && !rd && <ErrorState message={reserves.error} onRetry={reserves.reload} />}
+        {rd && !rd.configured && <Empty>{rd.message}</Empty>}
+        {rd?.configured && rd.value === null && <Empty>{rd.message ?? 'No EIA reserves figure for this country.'}</Empty>}
+        {rd?.configured && rd.value !== null && (
+          <Stat label={`Proved crude reserves${rd.year ? ` (${rd.year})` : ''}`} value={`${fmtBig(rd.value)} ${rd.unit ?? ''}`} sub="US EIA International Energy Data" />
+        )}
+        <p className="disclaimer">Proved reserves are the EIA International figure. Oil rents (% of GDP) above is a free World Bank proxy for oil income.</p>
+      </Section>
 
       {corruption && corruption.value !== null && (
         <div className="corruption">
@@ -108,7 +120,6 @@ function OverviewTab({ p }: { p: CountryResponse }) {
             </li>
           ))}
         </ul>
-        {oil && <p className="disclaimer">{oil.note}</p>}
       </Section>
 
       {p.notes.length > 0 && (

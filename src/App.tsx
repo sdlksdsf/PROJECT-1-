@@ -170,7 +170,7 @@ export function App() {
 
   const features = useCountryFeatures();
   const news = useResource<NewsResponse>('/api/news', NEWS_REFRESH_MS);
-  const flights = useResource<FlightsResponse>('/api/flights', 60_000);
+  const flights = useResource<FlightsResponse>('/api/flights', 120_000);
   const disasters = useResource<DisastersResponse>('/api/disasters', 300_000);
   const ships = useShips(layers.ships);
   const profile = useResource<CountryResponse>(country ? `/api/country?iso3=${country}` : null);

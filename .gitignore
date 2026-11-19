@@ -7,3 +7,7 @@ dist/
 *.log
 .DS_Store
 .vite/
+
+# Next.js
+.next/
+*.tsbuildinfo

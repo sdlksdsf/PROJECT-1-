@@ -410,7 +410,7 @@ kbd {
   top: calc(var(--top-h) + var(--ticker-h) + 12px);
   bottom: 12px;
   left: 12px;
-  width: 372px;
+  width: 396px;
   z-index: 20;
   display: flex;
   flex-direction: column;
@@ -1564,4 +1564,14 @@ ul {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.boot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: var(--bg);
 }

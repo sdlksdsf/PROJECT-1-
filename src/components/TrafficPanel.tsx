@@ -33,10 +33,10 @@ export function TrafficPanel({
 
   const shipNote: Record<ShipStatus, string> = {
     off: 'Turn the Ships layer on to start tracking.',
-    'no-key': 'Ship tracking needs a free AISStream.io key. Add VITE_AISSTREAM_API_KEY to the environment and redeploy.',
+    'no-key': 'Ship tracking needs a free AISStream.io key. Add AISSTREAM_API_KEY on the server and redeploy.',
     connecting: 'Connecting to the AIS stream…',
     live: `${fmtNumber(ships.length)} vessels reporting positions in the last few minutes.`,
-    error: 'The AIS stream disconnected. Reload the page to reconnect.',
+    error: 'The ship feed could not be reached. It retries every minute.',
   };
 
   return (
