@@ -227,6 +227,28 @@ export interface FlightStatus {
 export interface FlightStatusResponse {
   configured: boolean;
   flights: FlightStatus[];
+  source?: string;
+  message?: string;
+}
+
+export interface ConnectionSegment {
+  flight: string;
+  from: string | null;
+  to: string | null;
+  departs: string | null;
+  arrives: string | null;
+}
+
+export interface ConnectionOption {
+  totalDuration: string | null;
+  stops: number;
+  segments: ConnectionSegment[];
+}
+
+export interface ConnectionsResponse {
+  configured: boolean;
+  options: ConnectionOption[];
+  source?: string;
   message?: string;
 }
 
@@ -263,6 +285,7 @@ export interface HealthResponse {
     flights: boolean;
     weather: boolean;
     flightStatus: boolean;
+    connections: boolean;
   };
 }
 
@@ -280,6 +303,7 @@ export interface ShipsResponse {
   updatedAt: string;
   ships: ShipPoint[];
   message?: string;
+  note?: string;
 }
 
 export interface OilResponse {
@@ -288,5 +312,6 @@ export interface OilResponse {
   value: number | null;
   year: number | null;
   unit: string | null;
+  source: string | null;
   message?: string;
 }

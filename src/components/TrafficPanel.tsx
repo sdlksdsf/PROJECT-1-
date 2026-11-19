@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { FlightsResponse, FlightStatusResponse } from '../../shared/types';
+import type { ConnectionsResponse, FlightsResponse, FlightStatusResponse } from '../../shared/types';
 import { appStore } from '../lib/appState';
 import { useStore } from '../lib/store';
 import { fmtNumber, timeAgo } from '../lib/format';
@@ -7,13 +7,61 @@ import type { ShipStatus, ShipPoint } from '../lib/ships';
 import { useResource } from '../lib/useResource';
 import { Empty, ErrorState, Section, Spinner, Stat } from './ui';
 
+function ConnectionsLookup() {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [query, setQuery] = useState<string | null>(null);
+  const res = useResource<ConnectionsResponse>(query, 3_600_000);
+  const data = res.data;
+  const clock = (iso: string | null) => (iso ? iso.replace('T', ' ').slice(11, 16) : '—');
+  return (
+    <Section title="Connections" aside={<span className="muted small">{data?.source ?? 'OAG Flight Info Connections'}</span>}>
+      <form
+        className="flight-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const f = from.trim().toUpperCase();
+          const t = to.trim().toUpperCase();
+          if (/^[A-Z]{3}$/.test(f) && /^[A-Z]{3}$/.test(t) && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            setQuery(`/api/connections?from=${f}&to=${t}&date=${date}`);
+          }
+        }}
+      >
+        <input className="search-input" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="From, e.g. LHR" aria-label="From airport" maxLength={3} />
+        <input className="search-input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="To, e.g. ATH" aria-label="To airport" maxLength={3} />
+        <input className="search-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+        <button className="btn" type="submit">Find</button>
+      </form>
+      {query && res.loading && !data && <Spinner label="Finding connections" />}
+      {query && res.error && !data && <ErrorState message={res.error} onRetry={res.reload} />}
+      {data && !data.configured && <Empty>{data.message}</Empty>}
+      {data?.configured && data.message && <ErrorState message={data.message} onRetry={res.reload} />}
+      {data?.configured && !data.message && data.options.length === 0 && <Empty>No connections found for that route and date.</Empty>}
+      {data?.options.map((o, i) => (
+        <div className="flight-card" key={i}>
+          <div className="flight-head">
+            <strong>{o.stops === 0 ? 'Direct' : `${o.stops} stop${o.stops > 1 ? 's' : ''}`}</strong>
+            <span className="pill pill-gray">{o.totalDuration ?? '—'}</span>
+          </div>
+          {o.segments.map((s, j) => (
+            <div className="small" key={`${s.flight}-${j}`}>
+              {s.flight}: {s.from ?? '—'} {clock(s.departs)} → {s.to ?? '—'} {clock(s.arrives)}
+            </div>
+          ))}
+        </div>
+      ))}
+    </Section>
+  );
+}
+
 function FlightLookup() {
   const [draft, setDraft] = useState('');
   const [query, setQuery] = useState<string | null>(null);
   const res = useResource<FlightStatusResponse>(query ? `/api/flight-status?flight=${encodeURIComponent(query)}` : null, 900_000);
   const data = res.data;
   return (
-    <Section title="Flight status" aside={<span className="muted small">AviationStack</span>}>
+    <Section title="Flight status" aside={<span className="muted small">{data?.source ?? 'OAG · AviationStack'}</span>}>
       <form
         className="flight-form"
         onSubmit={(e) => {
@@ -95,6 +143,7 @@ export function TrafficPanel({
   return (
     <div className="panel-body">
       <FlightLookup />
+      <ConnectionsLookup />
       <Section title="Aircraft (live positions)" aside={<span className="muted small">OpenSky · {data ? timeAgo(data.updatedAt) : '—'}</span>}>
         {flights.loading && !data && <Spinner label="Reading aircraft transponders" />}
         {flights.error && !data && <ErrorState message={flights.error} onRetry={flights.reload} />}

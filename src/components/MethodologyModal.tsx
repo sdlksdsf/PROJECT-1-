@@ -22,7 +22,8 @@ const ENDPOINTS: { path: string; what: string }[] = [
   { path: '/api/cameras?cca2=PK', what: 'Public webcams (needs a Windy key)' },
   { path: '/api/health', what: 'Which optional services are configured' },
   { path: '/api/ships', what: 'Recent AIS vessel positions (AISStream, needs a key)' },
-  { path: '/api/oil?iso3=…', what: 'Proved crude-oil reserves (US EIA, needs a key)' },
+  { path: '/api/oil?iso3=…', what: 'Proved crude-oil reserves (OPEC ASB 2026; US EIA when it publishes a match)' },
+  { path: '/api/connections?from=&to=&date=', what: 'Onward flight connections (OAG, needs a key)' },
 ];
 
 const SOURCES: { name: string; use: string; license: string }[] = [
@@ -33,6 +34,8 @@ const SOURCES: { name: string; use: string; license: string }[] = [
   { name: 'OpenSky Network', use: 'Aircraft positions', license: 'Open data, non-commercial terms; attribution required' },
   { name: 'Open-Meteo', use: 'Weather and geocoding', license: 'Free for non-commercial use (CC BY 4.0 data)' },
   { name: 'World Bank Indicators & WGI', use: 'Economy, governance, oil rents', license: 'CC BY 4.0' },
+  { name: 'OPEC Annual Statistical Bulletin 2026', use: 'Proved crude-oil reserves by country (year-end 2025)', license: 'OPEC; non-commercial reuse with acknowledgement' },
+  { name: 'OAG developer APIs', use: 'Flight status and connections', license: 'Subscription terms of OAG; free tier with monthly call limits' },
   { name: 'Wikidata', use: 'Heads of state and government', license: 'CC0' },
   { name: 'REST Countries', use: 'Country basics', license: 'Open source (MPL-2.0)' },
   { name: 'Yahoo Finance chart data', use: 'Markets', license: 'Unofficial public endpoint; may be delayed or change' },
@@ -49,7 +52,7 @@ const LIMITS = [
   'Conflict markers are a curated list, not live data. Use the status labels and check the linked sources.',
   'Flight data shows positions and direction only. Routes need a commercial flight-data licence.',
   'Corruption is shown as the World Bank Control of Corruption percentile, not the Transparency International CPI score.',
-  'Oil: the free data gives oil rents as a share of GDP. Barrels per day need the US EIA API (free key), which is not connected yet.',
+  'Oil: reserves are the OPEC year-end 2025 table (a stock, not production). Oil rents are a World Bank proxy for oil income.',
 ];
 
 function Health() {

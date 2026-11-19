@@ -1,7 +1,10 @@
-// Flight status by flight number (e.g. PK300) from AviationStack (env AVIATIONSTACK_API_KEY).
-// The free plan is HTTP-only and capped per month, so results are cached for 30 minutes per flight.
+// Flight status by flight number (e.g. PK300).
+// 1. OAG Flight Info (OAG_FLIGHT_INFO_KEY): scheduled and estimated times, status, airports.
+// 2. AviationStack (AVIATIONSTACK_API_KEY): fallback, and the only source of live aircraft positions.
+// AviationStack's free plan is HTTP-only and about 100 calls a month, so results are cached for 30 minutes per flight.
 import { getJson, UpstreamError } from './http';
 import { remember } from './cache';
+import { oagFlightStatus } from './oag';
 import type { FlightStatus, FlightStatusResponse } from '../../shared/types';
 
 interface AsEndpoint {
@@ -36,16 +39,7 @@ const endpoint = (e?: AsEndpoint) => ({
   delay: e?.delay ?? null,
 });
 
-export function getFlightStatus(flight: string): Promise<FlightStatusResponse> {
-  const key = process.env.AVIATIONSTACK_API_KEY;
-  if (!key) {
-    return Promise.resolve({
-      configured: false,
-      flights: [],
-      message: 'Flight status needs a free AviationStack key. Add AVIATIONSTACK_API_KEY on the server.',
-    });
-  }
-  const code = flight.toUpperCase();
+function aviationStack(key: string, code: string): Promise<FlightStatusResponse> {
   return remember(`flight:${code}`, 30 * 60e3, async () => {
     try {
       // Free plan supports plain HTTP only. This call runs on the server, so the key is never exposed.
@@ -75,10 +69,38 @@ export function getFlightStatus(flight: string): Promise<FlightStatusResponse> {
             }
           : null,
       }));
-      return { configured: true, flights };
+      return { configured: true, flights, source: 'AviationStack' };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Flight lookup failed';
-      return { configured: true, flights: [], message };
+      return { configured: true, flights: [], message, source: 'AviationStack' };
     }
   });
+}
+
+export async function getFlightStatus(flight: string): Promise<FlightStatusResponse> {
+  const code = flight.toUpperCase();
+
+  let oag: FlightStatusResponse | null = null;
+  try {
+    oag = await oagFlightStatus(code);
+  } catch (err) {
+    oag = { configured: true, flights: [], source: 'OAG Flight Info', message: err instanceof Error ? err.message : 'OAG lookup failed' };
+  }
+  if (oag && oag.flights.length > 0) return oag;
+
+  const asKey = process.env.AVIATIONSTACK_API_KEY;
+  if (asKey) {
+    const as = await aviationStack(asKey, code);
+    if (as.flights.length > 0) return as;
+    // Neither source found the flight: report the most useful message.
+    if (oag) return { ...as, message: as.message ?? `No scheduled flight found for ${code} today.`, source: as.source };
+    return as;
+  }
+
+  if (oag) return { ...oag, message: oag.message ?? `No scheduled flight found for ${code} today.` };
+  return {
+    configured: false,
+    flights: [],
+    message: 'Flight status needs an OAG Flight Info key (OAG_FLIGHT_INFO_KEY) or an AviationStack key (AVIATIONSTACK_API_KEY) on the server.',
+  };
 }
