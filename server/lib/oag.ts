@@ -1,39 +1,34 @@
 // OAG (Official Airline Guide) developer APIs, https://api.oag.com.
-// Endpoints and parameters follow OAG's published OpenAPI document (Flight Info v2.0.0):
-//   GET /flights      carrierCode, flightNumber, departureDate (flight status)
-//   GET /connections  departureAirport, arrivalAirport, departureDate, maxConnections
 // Auth: the Ocp-Apim-Subscription-Key header. Each OAG product has its own subscription key:
-//   OAG_FLIGHT_INFO_KEY   Flight Info (free tier: 1,000 calls per 30 days)
+//   OAG_FLIGHT_INFO_KEY   Flight Info v2 (free tier: 1,000 calls per 30 days)
 //   OAG_CONNECTIONS_KEY   Flight Info Connections (free tier: 1,000 calls per month)
-// The free quota is small, so every result is cached on the server.
-import { getJson, UpstreamError } from './http';
+// Flight status uses GET /flight-instances/ (Flight Info v2). The key is rejected on /flights (401).
+// Checked against the live API: CarrierCode, FlightNumber, DepartureDateTime, CodeType=IATA, version=v2 returns the
+// scheduled instances for that flight.
+// Connections: no operation path has been confirmed. Probing guessed paths returns 404, so no call is made until
+// the path is known. The free quota is small, so every result is cached on the server.
+import { getJson } from './http';
 import { remember } from './cache';
-import type { ConnectionOption, ConnectionsResponse, FlightStatus, FlightStatusResponse } from '../../shared/types';
+import type { ConnectionsResponse, FlightStatus, FlightStatusResponse } from '../../shared/types';
 
 const BASE = 'https://api.oag.com';
 
+// Field names from the live Flight Info v2 response.
 interface OagFlight {
-  carrierCode?: string;
-  flightNumber?: string;
-  departureAirport?: string;
-  arrivalAirport?: string;
-  departureTime?: string;
-  arrivalTime?: string;
-  status?: string;
-  aircraftType?: string;
-}
-
-interface OagConnection {
-  segments?: OagFlight[];
-  totalDuration?: string;
-  connectionCount?: number;
+  carrier?: { iata?: string };
+  serviceSuffix?: string;
+  flightNumber?: number;
+  flightType?: string;
+  departure?: { airport?: { iata?: string }; date?: { local?: string }; time?: { local?: string; utc?: string } };
+  arrival?: { airport?: { iata?: string }; date?: { local?: string }; time?: { local?: string; utc?: string } };
+  aircraftType?: { iata?: string };
 }
 
 async function oagGet<T>(path: string, params: Record<string, string>, key: string): Promise<T> {
   const qs = new URLSearchParams(params).toString();
   return getJson<T>(`${BASE}${path}?${qs}`, {
     timeoutMs: 10000,
-    headers: { 'Ocp-Apim-Subscription-Key': key, 'Subscription-Key': key },
+    headers: { 'Ocp-Apim-Subscription-Key': key },
   });
 }
 
@@ -45,13 +40,28 @@ export function splitFlight(code: string): { carrier: string; number: string } |
   return m ? { carrier: m[1], number: m[2] } : null;
 }
 
+const joinLocal = (date?: string, time?: string) => (date && time ? `${date}T${time}` : null);
+
 const toStatus = (f: OagFlight): FlightStatus => ({
-  flight: `${f.carrierCode ?? ''}${f.flightNumber ?? ''}`,
+  flight: `${f.carrier?.iata ?? ''}${f.flightNumber ?? ''}${f.serviceSuffix ?? ''}`,
   airline: null,
-  date: f.departureTime ? f.departureTime.slice(0, 10) : null,
-  status: f.status ?? null,
-  departure: { airport: null, iata: f.departureAirport ?? null, scheduled: f.departureTime ?? null, estimated: null, delay: null },
-  arrival: { airport: null, iata: f.arrivalAirport ?? null, scheduled: f.arrivalTime ?? null, estimated: null, delay: null },
+  date: f.departure?.date?.local ?? null,
+  // The response gives the scheduled instance type, not a live status.
+  status: f.flightType ?? null,
+  departure: {
+    airport: null,
+    iata: f.departure?.airport?.iata ?? null,
+    scheduled: joinLocal(f.departure?.date?.local, f.departure?.time?.local),
+    estimated: null,
+    delay: null,
+  },
+  arrival: {
+    airport: null,
+    iata: f.arrival?.airport?.iata ?? null,
+    scheduled: joinLocal(f.arrival?.date?.local, f.arrival?.time?.local),
+    estimated: null,
+    delay: null,
+  },
   live: null,
 });
 
@@ -61,13 +71,23 @@ export function oagFlightStatus(code: string): Promise<FlightStatusResponse | nu
   const parts = splitFlight(code);
   if (!key || !parts) return Promise.resolve(null);
   return remember(`oag-flight:${code}`, 30 * 60e3, async (): Promise<FlightStatusResponse> => {
-    const data = await oagGet<{ data?: OagFlight[] }>('/flights', { carrierCode: parts.carrier, flightNumber: parts.number, departureDate: todayUtc() }, key);
+    const data = await oagGet<{ data?: OagFlight[] }>(
+      '/flight-instances/',
+      {
+        CarrierCode: parts.carrier,
+        FlightNumber: parts.number,
+        DepartureDateTime: todayUtc(),
+        CodeType: 'IATA',
+        version: 'v2',
+      },
+      key,
+    );
     const flights = (data.data ?? []).map(toStatus);
     return { configured: true, flights, source: 'OAG Flight Info' };
   });
 }
 
-export function oagConnections(from: string, to: string, date: string): Promise<ConnectionsResponse> {
+export function oagConnections(_from: string, _to: string, _date: string): Promise<ConnectionsResponse> {
   const key = process.env.OAG_CONNECTIONS_KEY;
   if (!key) {
     return Promise.resolve({
@@ -76,34 +96,10 @@ export function oagConnections(from: string, to: string, date: string): Promise<
       message: 'Connections need an OAG Flight Info Connections key. Add OAG_CONNECTIONS_KEY on the server and redeploy.',
     });
   }
-  return remember(`oag-conn:${from}:${to}:${date}`, 6 * 3600e3, async (): Promise<ConnectionsResponse> => {
-    try {
-      const data = await oagGet<{ data?: OagConnection[] }>(
-        '/connections',
-        { departureAirport: from, arrivalAirport: to, departureDate: date, maxConnections: '2' },
-        key,
-      );
-      const options: ConnectionOption[] = (data.data ?? []).map((c) => ({
-        totalDuration: c.totalDuration ?? null,
-        stops: c.connectionCount ?? Math.max(0, (c.segments?.length ?? 1) - 1),
-        segments: (c.segments ?? []).map((s) => ({
-          flight: `${s.carrierCode ?? ''}${s.flightNumber ?? ''}`,
-          from: s.departureAirport ?? null,
-          to: s.arrivalAirport ?? null,
-          departs: s.departureTime ?? null,
-          arrives: s.arrivalTime ?? null,
-        })),
-      }));
-      return { configured: true, options, source: 'OAG Flight Info Connections' };
-    } catch (err) {
-      // A 404 means the request path is not an OAG operation. The Connections path has not been confirmed yet.
-      const notFound = err instanceof UpstreamError && err.status === 404;
-      const message = notFound
-        ? 'OAG did not recognise the connections request (404). The connections path still needs to be confirmed against the OAG portal.'
-        : err instanceof UpstreamError
-          ? err.message
-          : 'Connections lookup failed';
-      return { configured: true, options: [], message };
-    }
+  return Promise.resolve({
+    configured: true,
+    options: [],
+    message:
+      'Connections are not available yet: the OAG Flight Info Connections operation has not been confirmed. The key is set; the request path still needs to be confirmed against the OAG portal spec.',
   });
 }
