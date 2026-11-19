@@ -35,6 +35,7 @@ function collect(key: string): Promise<ShipsResponse> {
     }
 
     let lastError: string | null = null;
+    let frames = 0;
     const finish = (err?: Error) => {
       if (settled) return;
       settled = true;
@@ -48,7 +49,13 @@ function collect(key: string): Promise<ShipsResponse> {
         reject(err ?? new UpstreamError(`AISStream: ${lastError}`, 502));
         return;
       }
-      resolve({ configured: true, updatedAt: new Date().toISOString(), ships: [...ships.values()] });
+      const note =
+        ships.size > 0
+          ? undefined
+          : frames === 0
+            ? `Connected to AISStream but it sent no messages in ${WINDOW_MS / 1000} s.`
+            : `AISStream sent ${frames} messages, none with a usable position, in ${WINDOW_MS / 1000} s.`;
+      resolve({ configured: true, updatedAt: new Date().toISOString(), ships: [...ships.values()], note });
     };
 
     const timer = setTimeout(() => finish(), WINDOW_MS + 2000);
@@ -71,6 +78,7 @@ function collect(key: string): Promise<ShipsResponse> {
     };
 
     ws.onmessage = (ev: MessageEvent) => {
+      frames++;
       try {
         const msg = JSON.parse(String(ev.data)) as {
           MessageType?: string;
