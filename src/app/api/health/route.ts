@@ -11,10 +11,12 @@ export const GET = handle(async () => {
     time: new Date().toISOString(),
     services: {
       database: dbConfig() !== null,
-      cameras: Boolean(process.env.WINDY_API_KEY),
+      cameras: Boolean(process.env.WINDY_API_KEY || process.env.WEBCAMDB_API_KEY),
       ships: Boolean(process.env.AISSTREAM_API_KEY),
       oil: Boolean(process.env.EIA_API_KEY),
       flights: Boolean(process.env.OPENSKY_CLIENT_ID && process.env.OPENSKY_CLIENT_SECRET),
+      weather: Boolean(process.env.OPENWEATHER_API_KEY),
+      flightStatus: Boolean(process.env.AVIATIONSTACK_API_KEY),
     },
   };
   return json(body, { maxAge: 30, swr: 60 });

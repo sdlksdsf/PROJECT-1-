@@ -1575,3 +1575,31 @@ ul {
   color: var(--muted);
   background: var(--bg);
 }
+
+/* Flight lookup (traffic panel) and camera attribution (country drawer) */
+.flight-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.flight-form .search-input {
+  flex: 1;
+  min-width: 0;
+}
+.flight-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.flight-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.cam-credit {
+  width: 100%;
+}

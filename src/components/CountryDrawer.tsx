@@ -200,12 +200,25 @@ function CamerasTab({ cca2, cameras }: { cca2: string | null; cameras: Res<Camer
       <Empty>
         <strong>Live cameras are not connected yet.</strong>
         <br />
-        {data.message} Registration is free at windy.com (Webcams API).
+        {data.message} Windy (windy.com) and OpenWebcamDB both offer free keys.
       </Empty>
     );
   }
-  if (data.cameras.length === 0) return <Empty>No public webcams are indexed for this country.</Empty>;
+  const badSources = (Object.keys(data.sources) as (keyof typeof data.sources)[]).filter((k) => data.sources[k] !== 'ok');
+  const sourceNote = badSources.length
+    ? badSources.map((k) => `${k === 'windy' ? 'Windy' : 'OpenWebcamDB'}: ${data.sources[k] === 'auth-failed' ? 'key rejected' : 'unavailable'}`).join(' · ')
+    : null;
+  if (data.cameras.length === 0) {
+    return (
+      <Empty>
+        No public webcams are indexed for this country.
+        {sourceNote && <span className="small muted"><br />{sourceNote}</span>}
+      </Empty>
+    );
+  }
   return (
+    <>
+    {sourceNote && <p className="small muted">{sourceNote}</p>}
     <ul className="cam-list">
       {data.cameras.map((c) => (
         <li key={c.id} className="cam">
@@ -230,11 +243,13 @@ function CamerasTab({ cca2, cameras }: { cca2: string | null; cameras: Res<Camer
                   Details
                 </a>
               )}
+              {c.attribution && <span className="cam-credit small muted">{c.attribution}</span>}
             </div>
           </div>
         </li>
       ))}
     </ul>
+    </>
   );
 }
 

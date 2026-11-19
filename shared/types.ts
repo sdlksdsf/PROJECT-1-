@@ -141,6 +141,7 @@ export interface FlightsResponse {
 
 export interface WeatherResponse {
   updatedAt: string;
+  source: string;
   timezone: string;
   current: {
     temp: number | null;
@@ -190,8 +191,12 @@ export interface CountryResponse {
   updatedAt: string;
 }
 
+export type CameraSourceId = 'windy' | 'openwebcamdb';
+export type CameraSourceStatus = 'ok' | 'no-key' | 'auth-failed' | 'error';
+
 export interface Camera {
   id: string;
+  source: CameraSourceId;
   title: string;
   city: string | null;
   lat: number | null;
@@ -199,11 +204,29 @@ export interface Camera {
   preview: string | null;
   embed: string | null;
   url: string | null;
+  attribution: string | null;
 }
 
 export interface CamerasResponse {
   configured: boolean;
   cameras: Camera[];
+  sources: Record<CameraSourceId, CameraSourceStatus>;
+  message?: string;
+}
+
+export interface FlightStatus {
+  flight: string;
+  airline: string | null;
+  date: string | null;
+  status: string | null;
+  departure: { airport: string | null; iata: string | null; scheduled: string | null; estimated: string | null; delay: number | null };
+  arrival: { airport: string | null; iata: string | null; scheduled: string | null; estimated: string | null; delay: number | null };
+  live: { lat: number; lon: number; altitude: number | null; speed: number | null; onGround: boolean } | null;
+}
+
+export interface FlightStatusResponse {
+  configured: boolean;
+  flights: FlightStatus[];
   message?: string;
 }
 
@@ -238,6 +261,8 @@ export interface HealthResponse {
     ships: boolean;
     oil: boolean;
     flights: boolean;
+    weather: boolean;
+    flightStatus: boolean;
   };
 }
 

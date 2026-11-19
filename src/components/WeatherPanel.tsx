@@ -179,7 +179,7 @@ export function WeatherPanel() {
           <CityCard key={c.name} {...c} />
         ))}
       </Section>
-      <p className="disclaimer">Weather data: Open-Meteo (free, no key). Updated every 10 minutes. Times are local to each location.</p>
+      <p className="disclaimer">Weather: OpenWeather for current conditions when connected, and Open-Meteo (free, no key) for the 3-day outlook. Updated every 10 minutes. Times are local to each location.</p>
     </div>
   );
 }
