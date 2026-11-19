@@ -25,6 +25,7 @@ export interface Layers {
   cameras: boolean;
   rain: boolean;
   radar: boolean;
+  waterways: boolean;
   autorotate: boolean;
 }
 
@@ -80,6 +81,7 @@ const defaultLayers: Layers = {
   cameras: true,
   rain: true,
   radar: false,
+  waterways: false,
   autorotate: true,
 };
 

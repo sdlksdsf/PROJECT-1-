@@ -343,3 +343,20 @@ export interface OilResponse {
   source: string | null;
   message?: string;
 }
+
+export interface PredictionMarket {
+  id: string;
+  question: string;
+  url: string;
+  leading: string; // the outcome shown, usually "Yes"
+  probability: number; // implied probability in percent, from the market price
+  volume24h: number | null; // USD traded in the last 24 hours
+  liquidity: number | null;
+  endDate: string | null;
+}
+
+export interface PredictionsResponse {
+  updatedAt: string;
+  source: string;
+  markets: PredictionMarket[];
+}

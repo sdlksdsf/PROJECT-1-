@@ -1952,3 +1952,45 @@ ul {
   padding: 4px 10px;
   color: var(--text);
 }
+
+/* Chokepoints (Traffic tab) and prediction markets (Markets tab). */
+.choke-list,
+.pred-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.choke-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.choke-counts {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pred {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pred a {
+  color: var(--text);
+  text-decoration: none;
+}
+.pred a:hover {
+  text-decoration: underline;
+}
+.pred-p {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}

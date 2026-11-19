@@ -5,6 +5,7 @@ import { useStore } from '../lib/store';
 import { fmtNumber, timeAgo } from '../lib/format';
 import type { ShipStatus, ShipPoint } from '../lib/ships';
 import { useResource } from '../lib/useResource';
+import { CHOKEPOINTS, distanceKm } from '../data/chokepoints';
 import { Empty, ErrorState, Section, Spinner, Stat } from './ui';
 
 function ConnectionsLookup() {
@@ -141,6 +142,8 @@ export function TrafficPanel({
   };
 
   return (
+    <>
+      <ChokepointsCard ships={ships} aircraft={data?.aircraft ?? []} />
     <div className="panel-body">
       <FlightLookup />
       <ConnectionsLookup />
@@ -201,5 +204,38 @@ export function TrafficPanel({
         )}
       </Section>
     </div>
+    </>
+  );
+}
+
+/** Ships and aircraft within each chokepoint's radius, from the live feeds. Counts only; not an assessment. */
+function ChokepointsCard({ ships, aircraft }: { ships: ShipPoint[]; aircraft: { lat: number; lon: number }[] }) {
+  const rows = useMemo(
+    () =>
+      CHOKEPOINTS.map((c) => {
+        const shipCount = ships.filter((s) => distanceKm(c.lat, c.lng, s.lat, s.lng) <= c.radiusKm).length;
+        const airCount = aircraft.filter((a) => distanceKm(c.lat, c.lng, a.lat, a.lon) <= c.radiusKm).length;
+        return { ...c, shipCount, airCount };
+      }).sort((a, b) => b.shipCount + b.airCount - (a.shipCount + a.airCount)),
+    [ships, aircraft],
+  );
+  return (
+    <Section title="Chokepoints" aside={<span className="muted small">Live counts within each area</span>}>
+      <ul className="choke-list">
+        {rows.map((r) => (
+          <li key={r.id} className="choke-row">
+            <div>
+              <strong>{r.name}</strong>
+              <span className="muted small"> · {r.note}</span>
+            </div>
+            <div className="choke-counts small">
+              <span title="Ships reporting AIS in the area">Ships {r.shipCount}</span>
+              <span title="Aircraft reporting in the area">Aircraft {r.airCount}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="small muted">Counts come from the AIS and ADS-B feeds, which only cover what they receive. A low count can mean poor coverage, not an empty strait.</p>
+    </Section>
   );
 }

@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { appStore, openCamera } from '../lib/appState';
 import { useStore } from '../lib/store';
 import { escapeHtml } from '../lib/format';
+import { CHOKEPOINTS } from '../data/chokepoints';
 import type { Camera, DisastersResponse, FlightsResponse, ShipPoint } from '../../shared/types';
 
 // Flat 2D map with the rain radar animated over it. Rain is drawn as one tile layer per frame, so the
@@ -219,6 +220,13 @@ export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) 
         m.addTo(group);
       }
     }
+    if (layers.waterways) {
+      for (const c of CHOKEPOINTS) {
+        const m = L.circleMarker([c.lat, c.lng], { renderer, radius: 6, color: '#fbbf24', weight: 2, fillColor: '#fbbf24', fillOpacity: 0.2 });
+        m.bindTooltip(`<b>${escapeHtml(c.name)}</b><br>${escapeHtml(c.note)}`, tipOpts);
+        m.addTo(group);
+      }
+    }
     if (layers.cameras) {
       for (const c of cameras) {
         if (c.lat === null || c.lon === null) continue;
@@ -228,7 +236,7 @@ export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) 
         m.addTo(group);
       }
     }
-  }, [flights, disasters, ships, cameras, layers.aircraft, layers.ships, layers.disasters, layers.cameras]);
+  }, [flights, disasters, ships, cameras, layers.aircraft, layers.ships, layers.disasters, layers.cameras, layers.waterways]);
 
   // Rain radar: animated frames, refreshed every minute.
   useEffect(() => {

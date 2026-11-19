@@ -35,6 +35,7 @@ const LAYER_TOGGLES: { key: keyof Layers; label: string }[] = [
   { key: 'ships', label: 'Ships (AIS)' },
   { key: 'cameras', label: 'Cameras' },
   { key: 'rain', label: 'Rain radar' },
+  { key: 'waterways', label: 'Chokepoints & waterways' },
   { key: 'radar', label: 'Radar sweep (animation)' },
   { key: 'autorotate', label: 'Auto-rotate' },
 ];

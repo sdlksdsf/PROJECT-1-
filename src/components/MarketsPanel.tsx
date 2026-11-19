@@ -5,6 +5,8 @@ import { useStore } from '../lib/store';
 import { useResource } from '../lib/useResource';
 import { fmtPct, fmtPrice } from '../lib/format';
 import { Empty, ErrorState, Section, Sparkline, Spinner } from './ui';
+import type { PredictionsResponse } from '../../shared/types';
+import { fmtNumber } from '../lib/format';
 
 const GROUP_TITLES: Record<QuoteGroup, string> = {
   index: 'Indices',
@@ -105,6 +107,7 @@ export function MarketsPanel() {
 
   return (
     <div className="panel-body">
+      <PredictionsCard />
       {main.loading && !main.data && <Spinner label="Fetching quotes" />}
       {main.error && !main.data && <ErrorState message={main.error} onRetry={main.reload} />}
       {main.data?.error && <ErrorState message={main.data.error} onRetry={main.reload} />}
@@ -169,5 +172,31 @@ export function MarketsPanel() {
         update: {main.data?.updatedAt ? new Date(main.data.updatedAt).toLocaleTimeString('en-GB') : '—'}. Not investment advice.
       </p>
     </div>
+  );
+}
+
+/** Most-traded prediction markets (Polymarket). Prices are what traders pay, not our forecast. */
+function PredictionsCard() {
+  const { data, error, loading, reload } = useResource<PredictionsResponse>('/api/predictions', 300_000);
+  return (
+    <Section title="Prediction markets" aside={<span className="muted small">{data?.source ?? 'Polymarket'}</span>}>
+      {loading && !data && <Spinner label="Loading markets" />}
+      {error && !data && <ErrorState message={error} onRetry={reload} />}
+      {data && data.markets.length === 0 && <Empty>No active markets right now.</Empty>}
+      {data && data.markets.length > 0 && (
+        <ul className="pred-list">
+          {data.markets.map((m) => (
+            <li key={m.id} className="pred">
+              <a href={m.url} target="_blank" rel="noopener noreferrer">{m.question}</a>
+              <div className="small muted">
+                <strong className="pred-p">{m.probability.toFixed(1)}%</strong> {m.leading}
+                {m.volume24h !== null && <> · ${fmtNumber(Math.round(m.volume24h))} traded in 24h</>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="small muted">Market prices reflect what people bet, not a forecast from this site.</p>
+    </Section>
   );
 }

@@ -5,6 +5,7 @@ import { appStore, openCamera, selectCountry, type Theme, type WeatherMap } from
 import { useStore } from '../lib/store';
 import { escapeHtml, timeAgo } from '../lib/format';
 import { CONFLICTS } from '../data/conflicts';
+import { CHOKEPOINTS } from '../data/chokepoints';
 import type { Camera, DisastersResponse, FlightsResponse } from '../../shared/types';
 import type { ShipPoint } from '../lib/ships';
 
@@ -17,7 +18,7 @@ export interface CountryFeature {
 
 interface GPoint {
   id: string;
-  kind: 'quake' | 'event' | 'aircraft' | 'ship' | 'camera';
+  kind: 'quake' | 'event' | 'aircraft' | 'ship' | 'camera' | 'chokepoint';
   lat: number;
   lng: number;
   alt: number;
@@ -731,6 +732,20 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
         });
       }
     }
+    if (layers.waterways) {
+      for (const c of CHOKEPOINTS) {
+        out.push({
+          id: `w-${c.id}`,
+          kind: 'chokepoint',
+          lat: c.lat,
+          lng: c.lng,
+          alt: FLAT,
+          r: 0.45,
+          color: '#fbbf24',
+          label: `<div class="globe-tip"><b>${escapeHtml(c.name)}</b><span>${escapeHtml(c.note)}</span></div>`,
+        });
+      }
+    }
     if (layers.cameras && cameras.length) {
       for (const c of cameras) {
         if (c.lat === null || c.lon === null) continue;
@@ -747,7 +762,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
       }
     }
     return out;
-  }, [disasters, flights, ships, cameras, layers.disasters, layers.aircraft, layers.ships, layers.cameras]);
+  }, [disasters, flights, ships, cameras, layers.disasters, layers.aircraft, layers.ships, layers.cameras, layers.waterways]);
 
   useEffect(() => {
     globeRef.current?.pointsData(points);
