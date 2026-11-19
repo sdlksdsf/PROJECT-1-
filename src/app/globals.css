@@ -1689,3 +1689,196 @@ ul {
 .radar-clock[hidden] {
   display: none;
 }
+
+/* Weather map: dropdown in the layer panel and its caption above the rain clock. */
+.layer-select label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+.layer-select select {
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+.weather-clock {
+  bottom: 52px;
+}
+
+/* Flat 2D radar map. Fills the stage like the globe does. */
+.map2d {
+  position: absolute;
+  inset: 0;
+}
+.map2d-canvas {
+  position: absolute;
+  inset: 0;
+  background: var(--globe-bg);
+}
+.map2d .leaflet-control-attribution {
+  font-size: 10px;
+  background: var(--glass);
+  color: var(--muted);
+}
+.map2d .leaflet-control-attribution a {
+  color: var(--muted);
+}
+.map2d .leaflet-control-zoom a {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--line);
+}
+.map2d-tip {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 6px 8px;
+}
+.map2d-tip::before {
+  display: none;
+}
+
+/* Live TV tab: player, region chips, channel cards, add-a-channel form. */
+.live-panel {
+  display: grid;
+  gap: 12px;
+}
+.live-player {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--line);
+}
+.live-player iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.live-caption {
+  margin-top: 6px;
+}
+.live-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+.live-regions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.live-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+.live-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.live-card.is-on {
+  border-color: var(--accent);
+}
+.live-card-meta {
+  display: grid;
+  gap: 2px;
+}
+.live-tag {
+  justify-self: start;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+.live-add {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.live-add-row {
+  display: flex;
+  gap: 6px;
+}
+.live-add-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+.live-error {
+  color: #f87171;
+  margin: 0;
+}
+.live-country {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.live-country-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+/* Map tools: time range and region jump, centred at the top of the map. */
+.map-tools {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.time-range {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+}
+.time-range .chip {
+  padding: 3px 10px;
+}
+.region-select {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  color: var(--text);
+}

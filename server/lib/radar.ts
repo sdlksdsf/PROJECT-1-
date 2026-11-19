@@ -40,14 +40,16 @@ export function getRadarFrames(): Promise<RadarFrames> {
   });
 }
 
-/** One 256 px tile of a radar frame at zoom 2 (x and y in 0..3). Returns PNG bytes. */
-export async function getRadarTile(path: string, x: number, y: number): Promise<Response> {
+/** One 256 px radar tile of a frame (zoom 0..7; x and y in 0..2^z-1). Returns PNG bytes. */
+export async function getRadarTile(path: string, z: number, x: number, y: number): Promise<Response> {
   if (!PATH_RE.test(path)) throw new UpstreamError('invalid radar frame', 400);
-  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > 3 || y < 0 || y > 3) {
+  if (!Number.isInteger(z) || z < 0 || z > 7) throw new UpstreamError('invalid zoom', 400);
+  const max = 2 ** z - 1;
+  if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x > max || y < 0 || y > max) {
     throw new UpstreamError('invalid tile', 400);
   }
   // Colour scheme 2 (Universal Blue), smooth 1, snow 1.
-  const res = await fetchWithTimeout(`${TILE_HOST}${path}/256/2/${x}/${y}/2/1_1.png`, { timeoutMs: 8000 });
+  const res = await fetchWithTimeout(`${TILE_HOST}${path}/256/${z}/${x}/${y}/2/1_1.png`, { timeoutMs: 8000 });
   if (!res.ok) throw new UpstreamError(`RainViewer tile ${res.status}`, 502);
   return new Response(await res.arrayBuffer(), {
     status: 200,

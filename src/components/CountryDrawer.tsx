@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { CamerasResponse, CountryResponse, Indicator, Leader, NewsResponse, OilResponse, WeatherResponse } from '../../shared/types';
-import { appStore, openCamera, selectCountry, type DrawerTab } from '../lib/appState';
+import { appStore, openCamera, openLiveStream, selectCountry, type DrawerTab } from '../lib/appState';
+import { LIVE_STREAMS } from '../data/liveStreams';
 import { useStore } from '../lib/store';
 import { useResource } from '../lib/useResource';
 import { fmtBig, fmtNumber } from '../lib/format';
@@ -194,7 +195,31 @@ function NewsTab({ iso3 }: { iso3: string }) {
 
 type Res<T> = { data: T | null; error: string | null; loading: boolean; reload: () => void };
 
+/** Live TV channels for this country (from the Live TV list), then its webcams. */
 function CamerasTab({ cca2, cameras }: { cca2: string | null; cameras: Res<CamerasResponse> }) {
+  const live = cca2 ? LIVE_STREAMS.filter((s) => s.countries.includes(cca2)) : [];
+  return (
+    <>
+      {live.length > 0 && (
+        <div className="live-country">
+          <p className="small muted">Live TV for this country (plays in the Live TV tab)</p>
+          <ul className="live-country-list">
+            {live.map((s) => (
+              <li key={s.id}>
+                <button className="btn btn-sm" onClick={() => openLiveStream(s.id)}>
+                  Watch {s.title} live
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <CamerasList cca2={cca2} cameras={cameras} />
+    </>
+  );
+}
+
+function CamerasList({ cca2, cameras }: { cca2: string | null; cameras: Res<CamerasResponse> }) {
   const { data, error, loading, reload } = cameras;
   if (!cca2) return <Empty>No camera coverage code for this territory.</Empty>;
   if (loading && !data) return <Spinner label="Looking for public cameras" />;
