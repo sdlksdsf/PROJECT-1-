@@ -97,11 +97,12 @@ async function fromAdsbLol(): Promise<FlightsResponse> {
         call: (a.flight ?? '').trim() || a.r || a.hex,
         // adsb.lol does not give the operating country. Show the registration and type instead.
         country: [a.r, a.t].filter(Boolean).join(' · ') || 'Unknown',
-        lat: a.lat,
-        lon: a.lon,
-        alt: typeof a.alt_baro === 'number' ? a.alt_baro * FT_TO_M : null,
-        vel: typeof a.gs === 'number' ? a.gs * KT_TO_MS : null,
-        hdg: typeof a.track === 'number' ? a.track : null,
+        // Rounded to keep the response small: 4 decimals is about 10 m.
+        lat: Math.round(a.lat * 1e4) / 1e4,
+        lon: Math.round(a.lon * 1e4) / 1e4,
+        alt: typeof a.alt_baro === 'number' ? Math.round(a.alt_baro * FT_TO_M) : null,
+        vel: typeof a.gs === 'number' ? Math.round(a.gs * KT_TO_MS * 10) / 10 : null,
+        hdg: typeof a.track === 'number' ? Math.round(a.track) : null,
       });
     }
   }
