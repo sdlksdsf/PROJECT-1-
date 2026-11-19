@@ -35,6 +35,7 @@ function collect(key: string): Promise<ShipsResponse> {
     }
 
     let lastError: string | null = null;
+    let closeInfo: string | null = null;
     let frames = 0;
     const finish = (err?: Error) => {
       if (settled) return;
@@ -52,9 +53,11 @@ function collect(key: string): Promise<ShipsResponse> {
       const note =
         ships.size > 0
           ? undefined
-          : frames === 0
-            ? `Connected to AISStream but it sent no messages in ${WINDOW_MS / 1000} s.`
-            : `AISStream sent ${frames} messages, none with a usable position, in ${WINDOW_MS / 1000} s.`;
+          : lastError
+            ? `AISStream rejected the subscription: ${lastError}`
+            : frames === 0
+              ? `Connected to AISStream but it sent no messages in ${WINDOW_MS / 1000} s.${closeInfo ? ` Socket: ${closeInfo}.` : ''}`
+              : `AISStream sent ${frames} messages, none with a usable position, in ${WINDOW_MS / 1000} s.`;
       resolve({ configured: true, updatedAt: new Date().toISOString(), ships: [...ships.values()], note });
     };
 
@@ -113,7 +116,13 @@ function collect(key: string): Promise<ShipsResponse> {
       }
     };
 
-    ws.onerror = () => finish(new UpstreamError('stream.aisstream.io error', 502));
-    ws.onclose = () => finish(new UpstreamError('stream.aisstream.io closed before data arrived', 502));
+    ws.onerror = (ev: Event) => {
+      const msg = (ev as ErrorEvent).message ?? 'unknown error';
+      finish(new UpstreamError(`stream.aisstream.io error: ${msg}`, 502));
+    };
+    ws.onclose = (ev: CloseEvent) => {
+      closeInfo = `code ${ev.code}${ev.reason ? ` ${ev.reason}` : ''}`;
+      finish(new UpstreamError(`stream.aisstream.io closed before data arrived (${closeInfo})`, 502));
+    };
   });
 }
