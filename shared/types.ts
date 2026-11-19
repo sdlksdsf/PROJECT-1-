@@ -280,6 +280,7 @@ export interface ShipsResponse {
   updatedAt: string;
   ships: ShipPoint[];
   message?: string;
+  note?: string;
 }
 
 export interface OilResponse {

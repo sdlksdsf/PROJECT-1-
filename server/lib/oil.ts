@@ -71,7 +71,7 @@ export function getOilReserves(iso3: string): Promise<OilResponse> {
         year: null,
         unit: null,
         updatedAt,
-        message: `EIA lists ${products.length} products, ${activities.length} measures and ${regions.length} countries. Not matched: ${[
+        message: `EIA measures available for this data set: ${activities.map((a) => a.name).join('; ')}. Not matched: ${[
           !product && 'crude-oil product',
           !activity && 'proved-reserves measure',
           !region && `country "${names[0] ?? code}"`,
