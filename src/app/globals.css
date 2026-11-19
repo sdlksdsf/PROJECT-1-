@@ -1672,3 +1672,20 @@ ul {
   display: grid;
   gap: 4px;
 }
+
+/* ---- rain radar time stamp ---- */
+.radar-clock {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  color: var(--text);
+  font-size: 12px;
+  pointer-events: none;
+}
+.radar-clock[hidden] {
+  display: none;
+}

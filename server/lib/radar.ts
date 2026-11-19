@@ -8,21 +8,35 @@ const TILE_HOST = 'https://tilecache.rainviewer.com';
 const PATH_RE = /^\/v2\/radar\/[a-z0-9]{6,}$/;
 
 export interface RadarFrame {
-  time: number;
+  time: number; // unix seconds
   path: string;
+  forecast: boolean; // true for nowcast frames (short-range forecast)
+}
+
+export interface RadarFrames {
+  generated: number; // unix seconds, when RainViewer built the list
+  frames: RadarFrame[]; // oldest first; past observations, then any forecast frames
   attribution: string;
 }
 
-export function getRadarFrame(): Promise<RadarFrame> {
-  return remember('radar:frame', 120e3, async () => {
-    const data = await getJson<{ radar?: { past?: { time: number; path: string }[]; nowcast?: { time: number; path: string }[] } }>(
-      MAPS_URL,
-      { timeoutMs: 8000 },
-    );
-    const past = data.radar?.past ?? [];
-    const latest = past[past.length - 1];
-    if (!latest || !PATH_RE.test(latest.path)) throw new UpstreamError('RainViewer returned no radar frame', 502);
-    return { time: latest.time, path: latest.path, attribution: 'Radar: RainViewer.com' };
+type Raw = { time: number; path: string }[] | undefined;
+
+/** The last two hours of observed rain (about 13 frames) plus any short-range forecast frames. */
+export function getRadarFrames(): Promise<RadarFrames> {
+  return remember('radar:frames', 60e3, async () => {
+    const data = await getJson<{ generated?: number; radar?: { past?: Raw; nowcast?: Raw } }>(MAPS_URL, { timeoutMs: 8000 });
+    const past = (data.radar?.past ?? []).filter((f) => PATH_RE.test(f.path));
+    const nowcast = (data.radar?.nowcast ?? []).filter((f) => PATH_RE.test(f.path));
+    if (past.length === 0) throw new UpstreamError('RainViewer returned no radar frames', 502);
+    const frames: RadarFrame[] = [
+      ...past.map((f) => ({ time: f.time, path: f.path, forecast: false })),
+      ...nowcast.map((f) => ({ time: f.time, path: f.path, forecast: true })),
+    ];
+    return {
+      generated: data.generated ?? Math.floor(Date.now() / 1000),
+      frames,
+      attribution: 'Radar: RainViewer.com',
+    };
   });
 }
 
