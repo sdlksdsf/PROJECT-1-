@@ -1,0 +1,177 @@
+{
+ "source": "OPEC Annual Statistical Bulletin 2026, Table 3.1 (world proven crude oil reserves by country)",
+ "sourceUrl": "https://publications.opec.org/ASSETS/assetdb/asb-2026.pdf",
+ "year": 2025,
+ "unit": "million barrels",
+ "note": "Year-end 2025 proven reserves. Canada excludes oil sands. Not production.",
+ "countries": {
+  "CAN": {
+   "name": "Canada",
+   "mb": 5080
+  },
+  "CHL": {
+   "name": "Chile",
+   "mb": 150
+  },
+  "MEX": {
+   "name": "Mexico",
+   "mb": 5136
+  },
+  "USA": {
+   "name": "United States",
+   "mb": 41909
+  },
+  "DNK": {
+   "name": "Denmark",
+   "mb": 333
+  },
+  "NOR": {
+   "name": "Norway",
+   "mb": 5919
+  },
+  "GBR": {
+   "name": "United Kingdom",
+   "mb": 1300
+  },
+  "AUS": {
+   "name": "Australia",
+   "mb": 1803
+  },
+  "CHN": {
+   "name": "China",
+   "mb": 34472
+  },
+  "IND": {
+   "name": "India",
+   "mb": 4995
+  },
+  "BRN": {
+   "name": "Brunei",
+   "mb": 1100
+  },
+  "IDN": {
+   "name": "Indonesia",
+   "mb": 2287
+  },
+  "MYS": {
+   "name": "Malaysia",
+   "mb": 2700
+  },
+  "VNM": {
+   "name": "Vietnam",
+   "mb": 4400
+  },
+  "ARG": {
+   "name": "Argentina",
+   "mb": 3093
+  },
+  "BRA": {
+   "name": "Brazil",
+   "mb": 16841
+  },
+  "COL": {
+   "name": "Colombia",
+   "mb": 2035
+  },
+  "ECU": {
+   "name": "Ecuador",
+   "mb": 8273
+  },
+  "VEN": {
+   "name": "Venezuela",
+   "mb": 303701
+  },
+  "IRN": {
+   "name": "Iran",
+   "mb": 208600
+  },
+  "IRQ": {
+   "name": "Iraq",
+   "mb": 140000
+  },
+  "KWT": {
+   "name": "Kuwait",
+   "mb": 101500
+  },
+  "OMN": {
+   "name": "Oman",
+   "mb": 4825
+  },
+  "QAT": {
+   "name": "Qatar",
+   "mb": 25244
+  },
+  "SAU": {
+   "name": "Saudi Arabia",
+   "mb": 267200
+  },
+  "ARE": {
+   "name": "United Arab Emirates",
+   "mb": 120000
+  },
+  "DZA": {
+   "name": "Algeria",
+   "mb": 12200
+  },
+  "AGO": {
+   "name": "Angola",
+   "mb": 2550
+  },
+  "COG": {
+   "name": "Congo",
+   "mb": 1811
+  },
+  "EGY": {
+   "name": "Egypt",
+   "mb": 3300
+  },
+  "GNQ": {
+   "name": "Equatorial Guinea",
+   "mb": 1100
+  },
+  "GAB": {
+   "name": "Gabon",
+   "mb": 2000
+  },
+  "LBY": {
+   "name": "Libya",
+   "mb": 48363
+  },
+  "NGA": {
+   "name": "Nigeria",
+   "mb": 37010
+  },
+  "SDN": {
+   "name": "Sudan",
+   "mb": 5000
+  },
+  "RUS": {
+   "name": "Russia",
+   "mb": 80000
+  },
+  "AZE": {
+   "name": "Azerbaijan",
+   "mb": 7000
+  },
+  "BLR": {
+   "name": "Belarus",
+   "mb": 198
+  },
+  "KAZ": {
+   "name": "Kazakhstan",
+   "mb": 30000
+  },
+  "TKM": {
+   "name": "Turkmenistan",
+   "mb": 600
+  },
+  "UKR": {
+   "name": "Ukraine",
+   "mb": 395
+  },
+  "UZB": {
+   "name": "Uzbekistan",
+   "mb": 594
+  }
+ }
+}

@@ -3,7 +3,7 @@ import { fail, handle, json, param } from '@server/lib/http';
 
 export const dynamic = 'force-dynamic';
 
-// GET /api/oil?iso3=SAU -> proved crude-oil reserves (US EIA, requires EIA_API_KEY)
+// GET /api/oil?iso3=SAU -> proved crude-oil reserves (OPEC ASB 2026; US EIA when it publishes a match)
 export const GET = handle(async (req) => {
   const iso3 = param(req, 'iso3');
   if (!iso3 || !/^[A-Za-z]{3}$/.test(iso3)) return fail(400, 'iso3 must be an ISO alpha-3 code');

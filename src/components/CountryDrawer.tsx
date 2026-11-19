@@ -75,14 +75,18 @@ function OverviewTab({ p }: { p: CountryResponse }) {
       </dl>
 
       <Section title="Oil reserves">
-        {reserves.loading && !rd && <Spinner label="Checking EIA" />}
+        {reserves.loading && !rd && <Spinner label="Loading reserves" />}
         {reserves.error && !rd && <ErrorState message={reserves.error} onRetry={reserves.reload} />}
         {rd && !rd.configured && <Empty>{rd.message}</Empty>}
-        {rd?.configured && rd.value === null && <Empty>{rd.message ?? 'No EIA reserves figure for this country.'}</Empty>}
+        {rd?.configured && rd.value === null && <Empty>{rd.message ?? 'No reserves figure for this country.'}</Empty>}
         {rd?.configured && rd.value !== null && (
-          <Stat label={`Proved crude reserves${rd.year ? ` (${rd.year})` : ''}`} value={`${fmtBig(rd.value)} ${rd.unit ?? ''}`} sub="US EIA International Energy Data" />
+          <Stat
+            label={`Proved crude reserves${rd.year ? ` (end ${rd.year})` : ''}`}
+            value={rd.unit === 'million barrels' ? `${(rd.value / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })} billion barrels` : `${fmtBig(rd.value)} ${rd.unit ?? ''}`}
+            sub={rd.source ?? undefined}
+          />
         )}
-        <p className="disclaimer">Proved reserves are the EIA International figure. Oil rents (% of GDP) above is a free World Bank proxy for oil income.</p>
+        <p className="disclaimer">Reserves are a year-end stock, not production. Oil rents (% of GDP) above is the World Bank measure of oil income.</p>
       </Section>
 
       {corruption && corruption.value !== null && (
