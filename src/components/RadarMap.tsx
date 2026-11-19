@@ -59,6 +59,7 @@ export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) 
   const layers = useStore(appStore, (s) => s.layers);
   const rainOn = layers.rain;
   const weatherMap = useStore(appStore, (s) => s.weatherMap);
+  const focus = useStore(appStore, (s) => s.focus);
   const overlayRef = useRef<L.LayerGroup | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -93,6 +94,14 @@ export function RadarMap({ flights, disasters, ships, cameras }: RadarMapProps) 
       weatherRef.current = null;
     };
   }, []);
+
+  // Region jump: move the flat map when a region is picked (the globe handles its own focus).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus) return;
+    const zoom = focus.alt > 2 ? 2 : focus.alt > 1.6 ? 3 : 4;
+    map.setView([focus.lat, focus.lng], zoom, { animate: true });
+  }, [focus]);
 
   // Swap the basemap when the theme changes.
   useEffect(() => {

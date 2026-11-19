@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { CamerasResponse, CountryResponse, DisastersResponse, FlightsResponse, NewsResponse } from '../shared/types';
-import { appStore, openCamera, selectCountry, type Layers, type LeftTab, type MapMode, type Theme, type WeatherMap } from './lib/appState';
+import { appStore, openCamera, requestFocus, selectCountry, TIME_RANGES, type Layers, type LeftTab, type MapMode, type Theme, type TimeRange, type WeatherMap } from './lib/appState';
 import { RadarMap } from './components/RadarMap';
 import { useStore } from './lib/store';
 import { useResource } from './lib/useResource';
@@ -15,6 +15,7 @@ import { ConflictsPanel } from './components/ConflictsPanel';
 import { CountryDrawer } from './components/CountryDrawer';
 import { MethodologyModal } from './components/MethodologyModal';
 import { CameraViewer } from './components/CameraViewer';
+import { LivePanel } from './components/LivePanel';
 
 const LEFT_TABS: { id: LeftTab; label: string }[] = [
   { id: 'news', label: 'News' },
@@ -23,6 +24,7 @@ const LEFT_TABS: { id: LeftTab; label: string }[] = [
   { id: 'disasters', label: 'Disasters' },
   { id: 'traffic', label: 'Traffic' },
   { id: 'conflicts', label: 'Conflicts' },
+  { id: 'live', label: 'Live TV' },
 ];
 
 const LAYER_TOGGLES: { key: keyof Layers; label: string }[] = [
@@ -146,6 +148,67 @@ const WEATHER_MAP_OPTIONS: { value: WeatherMap; label: string }[] = [
   { value: 'precip', label: 'Precipitation & snow' },
 ];
 
+/** Earthquakes and events within the chosen time range (the rest of the data is untouched). */
+function filterDisasters(data: DisastersResponse | null, range: TimeRange): DisastersResponse | null {
+  if (!data) return null;
+  const ms = TIME_RANGES.find((r) => r.id === range)?.ms ?? null;
+  if (ms === null) return data;
+  const cutoff = Date.now() - ms;
+  return {
+    ...data,
+    quakes: data.quakes.filter((q) => Date.parse(q.time) >= cutoff),
+    events: data.events.filter((e) => {
+      const t = Date.parse(e.date);
+      return Number.isNaN(t) || t >= cutoff;
+    }),
+  };
+}
+
+const REGION_VIEWS: { id: string; label: string; lat: number; lng: number; alt: number }[] = [
+  { id: 'global', label: 'Global', lat: 20, lng: 0, alt: 2.2 },
+  { id: 'americas', label: 'Americas', lat: 12, lng: -80, alt: 1.8 },
+  { id: 'europe', label: 'Europe', lat: 50, lng: 12, alt: 1.2 },
+  { id: 'mena', label: 'Middle East & N. Africa', lat: 27, lng: 30, alt: 1.4 },
+  { id: 'africa', label: 'Africa', lat: 2, lng: 20, alt: 1.8 },
+  { id: 'asia', label: 'Asia', lat: 30, lng: 100, alt: 1.8 },
+  { id: 'oceania', label: 'Oceania', lat: -25, lng: 135, alt: 1.8 },
+];
+
+/** Time range and region jump for the map (top left of the map). */
+function MapTools({ timeRange }: { timeRange: TimeRange }) {
+  return (
+    <div className="map-tools">
+      <div className="time-range" role="group" aria-label="Time range for earthquakes and events">
+        {TIME_RANGES.map((r) => (
+          <button
+            key={r.id}
+            className={`chip ${timeRange === r.id ? 'chip-on' : ''}`}
+            aria-pressed={timeRange === r.id}
+            onClick={() => appStore.set({ timeRange: r.id })}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+      <select
+        className="region-select"
+        aria-label="Jump to region"
+        defaultValue="global"
+        onChange={(e) => {
+          const v = REGION_VIEWS.find((r) => r.id === e.target.value);
+          if (v) requestFocus(v.lat, v.lng, v.alt);
+        }}
+      >
+        {REGION_VIEWS.map((r) => (
+          <option key={r.id} value={r.id}>
+            {r.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function LayerDock() {
   const layers = useStore(appStore, (s) => s.layers);
   const weatherMap = useStore(appStore, (s) => s.weatherMap);
@@ -190,6 +253,7 @@ function LayerDock() {
 export function App() {
   const theme = useStore(appStore, (s) => s.theme);
   const mapMode = useStore(appStore, (s) => s.mapMode);
+  const timeRange = useStore(appStore, (s) => s.timeRange);
   const leftTab = useStore(appStore, (s) => s.leftTab);
   const leftOpen = useStore(appStore, (s) => s.leftOpen);
   const country = useStore(appStore, (s) => s.country);
@@ -200,6 +264,7 @@ export function App() {
   const news = useResource<NewsResponse>('/api/news', NEWS_REFRESH_MS);
   const flights = useResource<FlightsResponse>('/api/flights', 120_000);
   const disasters = useResource<DisastersResponse>('/api/disasters', 300_000);
+  const mapDisasters = useMemo(() => filterDisasters(disasters.data, timeRange), [disasters.data, timeRange]);
   const ships = useShips(layers.ships);
   const profile = useResource<CountryResponse>(country ? `/api/country?iso3=${country}` : null);
   const cca2 = profile.data && profile.data.iso3 === country ? profile.data.cca2 : null;
@@ -305,16 +370,17 @@ export function App() {
           {leftTab === 'disasters' && <DisastersPanel disasters={disasters} />}
           {leftTab === 'traffic' && <TrafficPanel flights={flights} shipStatus={ships.status} ships={ships.ships} />}
           {leftTab === 'conflicts' && <ConflictsPanel stories={news.data?.stories ?? []} updatedAt={news.data?.updatedAt ?? null} />}
+          {leftTab === 'live' && <LivePanel />}
         </div>
       </aside>
 
       <main className="stage">
         {mapMode === 'flat' ? (
-          <RadarMap flights={flights.data} disasters={disasters.data} ships={ships.ships} cameras={globeCameras} />
+          <RadarMap flights={flights.data} disasters={mapDisasters} ships={ships.ships} cameras={globeCameras} />
         ) : (
           <GlobeView
             features={features}
-            disasters={disasters.data}
+            disasters={mapDisasters}
             flights={flights.data}
             ships={ships.ships}
             cameras={globeCameras}
@@ -322,6 +388,7 @@ export function App() {
             drawerOpen={Boolean(country)}
           />
         )}
+        <MapTools timeRange={timeRange} />
         <LayerDock />
         <p className="stage-hint small">
           {mapMode === 'flat' ? 'Drag to pan · scroll to zoom · click a camera to watch it' : 'Drag to rotate · scroll to zoom · click a country'}
