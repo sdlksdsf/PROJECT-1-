@@ -46,7 +46,7 @@ export function getOilReserves(iso3: string): Promise<OilResponse> {
     const activity = activities.find((f) => /proved reserves|reserves/i.test(f.name));
     const names = (countryNames as { iso3: string; names: string[] }[]).find((c) => c.iso3 === code)?.names ?? [];
     const wanted = new Set(names.map(norm));
-    const region = regions.find((f) => wanted.has(norm(f.name)));
+    const region = regions.find((f) => f.id === code) ?? regions.find((f) => wanted.has(norm(f.name)));
     if (!product || !activity || !region) {
       return {
         configured: true,
