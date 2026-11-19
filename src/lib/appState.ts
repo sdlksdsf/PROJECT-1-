@@ -11,6 +11,7 @@ export interface Layers {
   headings: boolean;
   ships: boolean;
   cameras: boolean;
+  rain: boolean;
   radar: boolean;
   autorotate: boolean;
 }
@@ -30,6 +31,7 @@ export interface AppState {
   drawerTab: DrawerTab;
   layers: Layers;
   focus: Focus | null;
+  camera: string | null; // id of the camera open in the viewer
   methodologyOpen: boolean;
   newsCategory: string;
   newsQuery: string;
@@ -58,7 +60,8 @@ const defaultLayers: Layers = {
   headings: false,
   ships: false,
   cameras: true,
-  radar: true,
+  rain: true,
+  radar: false,
   autorotate: true,
 };
 
@@ -80,6 +83,7 @@ export const appStore = createStore<AppState>({
   drawerTab: 'overview',
   layers: { ...defaultLayers, ...readJson<Partial<Layers>>(LAYERS_KEY, {}) },
   focus: null,
+  camera: null,
   methodologyOpen: false,
   newsCategory: 'all',
   newsQuery: '',
@@ -121,6 +125,10 @@ export function toggleSaved(id: string): void {
 
 export function selectCountry(iso3: string | null): void {
   appStore.set({ country: iso3, drawerTab: 'overview' });
+}
+
+export function openCamera(id: string | null): void {
+  appStore.set({ camera: id });
 }
 
 export function requestFocus(lat: number, lng: number, alt = 1.4): void {

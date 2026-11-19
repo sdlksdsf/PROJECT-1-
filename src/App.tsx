@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { CamerasResponse, CountryResponse, DisastersResponse, FlightsResponse, NewsResponse } from '../shared/types';
-import { appStore, selectCountry, type Layers, type LeftTab, type Theme } from './lib/appState';
+import { appStore, openCamera, selectCountry, type Layers, type LeftTab, type Theme } from './lib/appState';
 import { useStore } from './lib/store';
 import { useResource } from './lib/useResource';
 import { useShips } from './lib/ships';
@@ -13,6 +13,7 @@ import { TrafficPanel } from './components/TrafficPanel';
 import { ConflictsPanel } from './components/ConflictsPanel';
 import { CountryDrawer } from './components/CountryDrawer';
 import { MethodologyModal } from './components/MethodologyModal';
+import { CameraViewer } from './components/CameraViewer';
 
 const LEFT_TABS: { id: LeftTab; label: string }[] = [
   { id: 'news', label: 'News' },
@@ -30,7 +31,8 @@ const LAYER_TOGGLES: { key: keyof Layers; label: string }[] = [
   { key: 'headings', label: 'Heading vectors' },
   { key: 'ships', label: 'Ships (AIS)' },
   { key: 'cameras', label: 'Cameras' },
-  { key: 'radar', label: 'Radar sweep' },
+  { key: 'rain', label: 'Rain radar' },
+  { key: 'radar', label: 'Radar sweep (animation)' },
   { key: 'autorotate', label: 'Auto-rotate' },
 ];
 
@@ -176,13 +178,20 @@ export function App() {
   const profile = useResource<CountryResponse>(country ? `/api/country?iso3=${country}` : null);
   const cca2 = profile.data && profile.data.iso3 === country ? profile.data.cca2 : null;
   const cameras = useResource<CamerasResponse>(cca2 ? `/api/cameras?cca2=${cca2}` : null, 600_000);
+  const worldCameras = useResource<CamerasResponse>(layers.cameras ? '/api/cameras/map' : null, 600_000);
+  const camera = useStore(appStore, (s) => s.camera);
 
   // Only show the profile that belongs to the selected country.
   const currentProfile = profile.data && profile.data.iso3 === country ? profile.data : null;
-  const globeCameras = useMemo(
-    () => (layers.cameras ? (cameras.data?.cameras ?? []).filter((c) => c.lat !== null && c.lon !== null) : []),
-    [layers.cameras, cameras.data],
-  );
+  // Worldwide cameras plus the selected country's list, de-duplicated by id.
+  const globeCameras = useMemo(() => {
+    if (!layers.cameras) return [];
+    const byId = new Map<string, CamerasResponse['cameras'][number]>();
+    for (const c of [...(worldCameras.data?.cameras ?? []), ...(cameras.data?.cameras ?? [])]) {
+      if (c.lat !== null && c.lon !== null && !byId.has(c.id)) byId.set(c.id, c);
+    }
+    return [...byId.values()];
+  }, [layers.cameras, worldCameras.data, cameras.data]);
 
   // Theme on <html> so CSS variables switch everywhere, including the globe chrome.
   useEffect(() => {
@@ -196,7 +205,8 @@ export function App() {
       if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
       const s = appStore.get();
       if (e.key === 'Escape') {
-        if (s.methodologyOpen) appStore.set({ methodologyOpen: false });
+        if (s.camera) openCamera(null);
+        else if (s.methodologyOpen) appStore.set({ methodologyOpen: false });
         else if (s.country) selectCountry(null);
       } else if (e.key === 'r' || e.key === 'R') {
         appStore.set((st) => ({ layers: { ...st.layers, radar: !st.layers.radar } }));
@@ -260,7 +270,7 @@ export function App() {
           {leftTab === 'weather' && <WeatherPanel />}
           {leftTab === 'disasters' && <DisastersPanel disasters={disasters} />}
           {leftTab === 'traffic' && <TrafficPanel flights={flights} shipStatus={ships.status} ships={ships.ships} />}
-          {leftTab === 'conflicts' && <ConflictsPanel />}
+          {leftTab === 'conflicts' && <ConflictsPanel stories={news.data?.stories ?? []} updatedAt={news.data?.updatedAt ?? null} />}
         </div>
       </aside>
 
@@ -288,6 +298,7 @@ export function App() {
         </aside>
       )}
 
+      {camera && <CameraViewer id={camera} />}
       {methodologyOpen && <MethodologyModal />}
     </div>
   );
