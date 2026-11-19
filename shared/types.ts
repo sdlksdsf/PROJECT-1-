@@ -131,6 +131,7 @@ export interface Aircraft {
 }
 
 export interface FlightsResponse {
+  source?: string;
   updatedAt: string;
   total: number;
   airborne: number;
@@ -194,6 +195,9 @@ export interface CountryResponse {
 export type CameraSourceId = 'windy' | 'openwebcamdb';
 export type CameraSourceStatus = 'ok' | 'no-key' | 'auth-failed' | 'error';
 
+// How a camera's live picture can be shown inside the app.
+export type CameraKind = 'iframe' | 'youtube' | 'hls' | 'mjpeg' | 'image';
+
 export interface Camera {
   id: string;
   source: CameraSourceId;
@@ -205,6 +209,21 @@ export interface Camera {
   embed: string | null;
   url: string | null;
   attribution: string | null;
+  kind: CameraKind | null;
+}
+
+// Live view for one camera, from GET /api/camera?id=. `stream` is null when the source offers no playable stream.
+export interface CameraDetail {
+  id: string;
+  title: string;
+  city: string | null;
+  source: CameraSourceId;
+  attribution: string | null;
+  permalink: string | null;
+  kind: CameraKind | null;
+  stream: string | null;
+  refreshSeconds: number | null;
+  message?: string;
 }
 
 export interface CamerasResponse {

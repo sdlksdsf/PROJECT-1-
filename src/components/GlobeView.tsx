@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import Globe, { type GlobeInstance } from 'globe.gl';
-import { appStore, selectCountry } from '../lib/appState';
+import * as THREE from 'three';
+import { appStore, openCamera, selectCountry } from '../lib/appState';
 import { useStore } from '../lib/store';
 import { escapeHtml, timeAgo } from '../lib/format';
 import { CONFLICTS } from '../data/conflicts';
@@ -69,6 +70,11 @@ const EVENT_COLORS: Record<string, string> = {
   'Dust and Haze': '#a8a29e',
 };
 
+// Markers sit almost on the surface, so they read as flat dots instead of 3D columns.
+const FLAT = 0.002;
+// Radius of the globe in globe.gl units.
+const GLOBE_R = 100;
+
 const CENTROID_CACHE = new Map<string, { lat: number; lng: number }>();
 
 function centroidOf(f: CountryFeature): { lat: number; lng: number } | null {
@@ -131,6 +137,72 @@ const THEME = {
     stroke: 'rgba(30,41,59,0.30)',
   },
 } as const;
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} ${res.status}`);
+  return (await res.json()) as T;
+}
+
+function loadTile(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('tile failed'));
+    img.src = url;
+  });
+}
+
+/**
+ * Builds an equirectangular (longitude/latitude) image of one radar frame.
+ * RainViewer tiles are Web Mercator, so 16 zoom-2 tiles are joined and re-sampled onto the globe's grid.
+ */
+async function stitchRadar(path: string): Promise<HTMLCanvasElement> {
+  const world = document.createElement('canvas');
+  world.width = 1024;
+  world.height = 1024;
+  const wctx = world.getContext('2d');
+  if (!wctx) throw new Error('no canvas');
+  const jobs: Promise<void>[] = [];
+  for (let x = 0; x < 4; x++) {
+    for (let y = 0; y < 4; y++) {
+      const url = `/api/radar/tile?p=${encodeURIComponent(path)}&x=${x}&y=${y}`;
+      jobs.push(loadTile(url).then((img) => wctx.drawImage(img, x * 256, y * 256)));
+    }
+  }
+  await Promise.all(jobs);
+  const src = wctx.getImageData(0, 0, 1024, 1024).data;
+
+  const W = 2048;
+  const H = 1024;
+  const out = document.createElement('canvas');
+  out.width = W;
+  out.height = H;
+  const octx = out.getContext('2d');
+  if (!octx) throw new Error('no canvas');
+  const img = octx.createImageData(W, H);
+  const d = img.data;
+  const MERC_LIMIT = 85.0511;
+  for (let row = 0; row < H; row++) {
+    const lat = 90 - ((row + 0.5) / H) * 180;
+    if (Math.abs(lat) > MERC_LIMIT) continue; // poles have no radar coverage: leave transparent
+    const rad = (lat * Math.PI) / 180;
+    const my = ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 1024;
+    const sy = Math.min(1023, Math.max(0, Math.floor(my)));
+    for (let col = 0; col < W; col++) {
+      const lng = ((col + 0.5) / W) * 360 - 180;
+      const sx = Math.min(1023, Math.max(0, Math.floor(((lng + 180) / 360) * 1024)));
+      const si = (sy * 1024 + sx) * 4;
+      const di = (row * W + col) * 4;
+      d[di] = src[si];
+      d[di + 1] = src[si + 1];
+      d[di + 2] = src[si + 2];
+      d[di + 3] = src[si + 3];
+    }
+  }
+  octx.putImageData(img, 0, 0);
+  return out;
+}
 
 function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarOpen, drawerOpen }: GlobeViewProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -207,6 +279,10 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
       .pointRadius('r')
       .pointColor('color')
       .pointLabel('label')
+      .onPointClick((p: object) => {
+        const pt = p as GPoint;
+        if (pt.kind === 'camera') openCamera(pt.id.slice(2));
+      })
       .pointsTransitionDuration(300)
       .arcsData([])
       .arcStartLat('startLat')
@@ -318,6 +394,56 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme]);
 
+  // ---- rain radar (RainViewer, refreshed every 5 minutes) --------------
+  useEffect(() => {
+    const g = globeRef.current;
+    if (!g || !layers.rain) return;
+    const scene = g.scene();
+    let mesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null = null;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const attach = (canvas: HTMLCanvasElement) => {
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      if (!mesh) {
+        mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(GLOBE_R * 1.004, 128, 64),
+          new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, depthWrite: false }),
+        );
+        mesh.renderOrder = 2;
+        scene.add(mesh);
+      }
+      mesh.material.map?.dispose();
+      mesh.material.map = tex;
+      mesh.material.needsUpdate = true;
+    };
+
+    const load = async () => {
+      try {
+        const frame = await fetchJson<{ path: string }>('/api/radar/frame');
+        const canvas = await stitchRadar(frame.path);
+        if (!cancelled) attach(canvas);
+      } catch {
+        // Keep the previous frame and try again later.
+      }
+      if (!cancelled) timer = window.setTimeout(load, 5 * 60e3);
+    };
+    load();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      if (mesh) {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        mesh.material.map?.dispose();
+        mesh.material.dispose();
+        mesh = null;
+      }
+    };
+  }, [layers.rain]);
+
   // ---- selection, layers that colour polygons ---------------------------
   useEffect(() => {
     paintPolygons();
@@ -378,7 +504,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
           kind: 'quake',
           lat: q.lat,
           lng: q.lon,
-          alt: 0.01 + q.mag * 0.012,
+          alt: FLAT,
           r: 0.22 + q.mag * 0.07,
           color: quakeColor(q.mag),
           label: `<div class="globe-tip"><b>M${q.mag.toFixed(1)} earthquake</b><span>${escapeHtml(q.place)}</span><span>${timeAgo(q.time)} · depth ${q.depth.toFixed(0)} km${q.tsunami ? ' · tsunami alert' : ''}</span></div>`,
@@ -390,7 +516,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
           kind: 'event',
           lat: e.lat,
           lng: e.lon,
-          alt: 0.02,
+          alt: FLAT,
           r: 0.4,
           color: EVENT_COLORS[e.category] ?? '#f472b6',
           label: `<div class="globe-tip"><b>${escapeHtml(e.title)}</b><span>${escapeHtml(e.category)}</span></div>`,
@@ -404,7 +530,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
           kind: 'aircraft',
           lat: a.lat,
           lng: a.lon,
-          alt: a.alt ? Math.min(0.09, a.alt / 300000) : 0.01,
+          alt: FLAT,
           r: 0.1,
           color: aircraftColor(a.alt),
           label: `<div class="globe-tip"><b>✈ ${escapeHtml(a.call)}</b><span>${escapeHtml(a.country)}</span><span>${a.alt ? Math.round(a.alt) + ' m' : 'altitude n/a'} · ${a.vel ? Math.round(a.vel * 3.6) + ' km/h' : 'speed n/a'}</span></div>`,
@@ -418,7 +544,7 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
           kind: 'ship',
           lat: s.lat,
           lng: s.lng,
-          alt: 0.005,
+          alt: FLAT,
           r: 0.14,
           color: '#34d399',
           label: `<div class="globe-tip"><b>${escapeHtml(s.name)}</b><span>MMSI ${escapeHtml(s.mmsi)}${s.sog !== null ? ` · ${s.sog.toFixed(1)} kn` : ''}</span></div>`,
@@ -433,8 +559,8 @@ function GlobeViewInner({ features, disasters, flights, ships, cameras, sidebarO
           kind: 'camera',
           lat: c.lat,
           lng: c.lon,
-          alt: 0.02,
-          r: 0.5,
+          alt: FLAT,
+          r: 0.34,
           color: '#f472b6',
           label: `<div class="globe-tip"><b>📷 ${escapeHtml(c.title)}</b><span>${escapeHtml(c.city ?? '')}</span></div>`,
         });

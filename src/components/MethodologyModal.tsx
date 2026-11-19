@@ -14,7 +14,10 @@ const ENDPOINTS: { path: string; what: string }[] = [
   { path: '/api/sources', what: 'Outlet registry with editorial standing' },
   { path: '/api/markets?symbols=AAPL,^GSPC', what: 'Quotes and 30-day closes (max 40 symbols)' },
   { path: '/api/disasters', what: 'USGS earthquakes (24 h, M2.5+) and NASA EONET events' },
-  { path: '/api/flights', what: 'Airborne aircraft positions (OpenSky)' },
+  { path: '/api/flights', what: 'Live aircraft positions (adsb.lol; OpenSky as fallback)' },
+  { path: '/api/radar/frame', what: 'Latest rain radar frame (RainViewer)' },
+  { path: '/api/cameras/map', what: 'Worldwide webcam markers (OpenWebcamDB, needs a key)' },
+  { path: '/api/camera?id=', what: 'Live view for one camera (stream address or still image)' },
   { path: '/api/weather?lat=…&lon=…', what: 'Current conditions and 3-day forecast (Open-Meteo)' },
   { path: '/api/geocode?q=…', what: 'Place search (Open-Meteo geocoding)' },
   { path: '/api/country?iso3=PAK', what: 'Country profile, World Bank indicators, Wikidata leaders' },
@@ -31,12 +34,15 @@ const SOURCES: { name: string; use: string; license: string }[] = [
   { name: 'GDELT 2.0 DOC API', use: 'Country-specific coverage', license: 'Open index of news metadata (gdeltproject.org)' },
   { name: 'USGS Earthquake Hazards feed', use: 'Earthquakes', license: 'US Government work, public domain' },
   { name: 'NASA EONET v3', use: 'Natural events', license: 'NASA open data' },
-  { name: 'OpenSky Network', use: 'Aircraft positions', license: 'Open data, non-commercial terms; attribution required' },
+  { name: 'adsb.lol', use: 'Live aircraft positions', license: 'Open ADS-B data (ODbL); attribution to adsb.lol' },
+  { name: 'OpenSky Network (fallback)', use: 'Aircraft positions when adsb.lol is unavailable', license: 'Open data, non-commercial terms; attribution required' },
+  { name: 'RainViewer', use: 'Rain radar on the globe', license: 'Free public radar data; attribution to RainViewer.com' },
   { name: 'Open-Meteo', use: 'Weather and geocoding', license: 'Free for non-commercial use (CC BY 4.0 data)' },
   { name: 'World Bank Indicators & WGI', use: 'Economy, governance, oil rents', license: 'CC BY 4.0' },
   { name: 'OPEC Annual Statistical Bulletin 2026', use: 'Proved crude-oil reserves by country (year-end 2025)', license: 'OPEC; non-commercial reuse with acknowledgement' },
   { name: 'OAG developer APIs', use: 'Flight status and connections', license: 'Subscription terms of OAG; free tier with monthly call limits' },
   { name: 'Wikidata', use: 'Heads of state and government', license: 'CC0' },
+  { name: 'OpenWebcamDB API', use: 'Worldwide public cameras and live streams', license: 'Free for non-commercial use with attribution' },
   { name: 'REST Countries', use: 'Country basics', license: 'Open source (MPL-2.0)' },
   { name: 'Yahoo Finance chart data', use: 'Markets', license: 'Unofficial public endpoint; may be delayed or change' },
   { name: 'Natural Earth (via three-globe)', use: 'Country boundaries and globe textures', license: 'Public domain' },
@@ -49,7 +55,7 @@ const LIMITS = [
   'Clustering groups headlines by shared keywords. Two different events with similar headlines can be merged, and one event can occasionally split.',
   'Country tagging is keyword-based. Common words can match a country name (for example, a person named “Chad”).',
   'Outlet standing grades are editorial placeholders based on process (broadcaster, wire, newsroom, aggregator). They are not a judgement of political leaning. Edit them in the database or in server/lib/feeds.ts.',
-  'Conflict markers are a curated list, not live data. Use the status labels and check the linked sources.',
+  'Conflict markers are a fixed list of locations, not a casualty or status feed. The reports listed under each conflict are live news matched by country code, so check them before relying on them.',
   'Flight data shows positions and direction only. Routes need a commercial flight-data licence.',
   'Corruption is shown as the World Bank Control of Corruption percentile, not the Transparency International CPI score.',
   'Oil: reserves are the OPEC year-end 2025 table (a stock, not production). Oil rents are a World Bank proxy for oil income.',
@@ -75,7 +81,7 @@ function Health() {
         <span className="dot" /> Oil reserves {data.services.oil ? 'connected' : 'not connected (needs EIA_API_KEY)'}
       </li>
       <li className={data.services.flights ? 'ok' : 'bad'}>
-        <span className="dot" /> Aircraft feed {data.services.flights ? 'registered OpenSky client' : 'anonymous (400 requests/day budget)'}
+        <span className="dot" /> Aircraft feed {data.services.flights ? 'connected' : 'unavailable right now'}
       </li>
     </ul>
   );
@@ -224,7 +230,7 @@ export function MethodologyModal() {
                 <kbd>Esc</kbd> close panels
               </li>
               <li>
-                <kbd>R</kbd> toggle radar scan
+                <kbd>R</kbd> toggle radar sweep animation
               </li>
               <li>
                 <kbd>T</kbd> toggle dark / light theme

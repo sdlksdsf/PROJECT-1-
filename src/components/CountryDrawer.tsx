@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CamerasResponse, CountryResponse, Indicator, Leader, NewsResponse, OilResponse, WeatherResponse } from '../../shared/types';
-import { appStore, selectCountry, type DrawerTab } from '../lib/appState';
+import { appStore, openCamera, selectCountry, type DrawerTab } from '../lib/appState';
 import { useStore } from '../lib/store';
 import { useResource } from '../lib/useResource';
 import { fmtBig, fmtNumber } from '../lib/format';
@@ -136,9 +136,11 @@ function OverviewTab({ p }: { p: CountryResponse }) {
         </ul>
       )}
       <div className="btn-row">
-        <a className="btn btn-ghost btn-sm" href={`https://en.wikipedia.org/wiki/${encodeURIComponent(p.name)}`} target="_blank" rel="noopener noreferrer">
-          Wikipedia
-        </a>
+        {p.cca2 && (
+          <a className="btn btn-ghost btn-sm" href={`https://data.worldbank.org/country/${p.cca2.toLowerCase()}`} target="_blank" rel="noopener noreferrer">
+            World Bank data
+          </a>
+        )}
       </div>
     </>
   );
@@ -194,7 +196,6 @@ type Res<T> = { data: T | null; error: string | null; loading: boolean; reload: 
 
 function CamerasTab({ cca2, cameras }: { cca2: string | null; cameras: Res<CamerasResponse> }) {
   const { data, error, loading, reload } = cameras;
-  const [live, setLive] = useState<string | null>(null);
   if (!cca2) return <Empty>No camera coverage code for this territory.</Empty>;
   if (loading && !data) return <Spinner label="Looking for public cameras" />;
   if (error && !data) return <ErrorState message={error} onRetry={reload} />;
@@ -226,27 +227,14 @@ function CamerasTab({ cca2, cameras }: { cca2: string | null; cameras: Res<Camer
     <ul className="cam-list">
       {data.cameras.map((c) => (
         <li key={c.id} className="cam">
-          {live === c.id && c.embed ? (
-            <iframe title={c.title} src={c.embed} loading="lazy" allow="autoplay; fullscreen" referrerPolicy="strict-origin-when-cross-origin" />
-          ) : c.preview ? (
-            <img src={c.preview} alt="" loading="lazy" />
-          ) : (
-            <div className="cam-placeholder">No preview</div>
-          )}
+          {c.preview ? <img src={c.preview} alt="" loading="lazy" /> : <div className="cam-placeholder">No preview</div>}
           <div className="cam-meta">
             <strong>{c.title}</strong>
             <span className="muted small">{c.city ?? ''}</span>
             <div className="btn-row">
-              {c.embed && (
-                <button className="btn btn-sm" onClick={() => setLive(live === c.id ? null : c.id)}>
-                  {live === c.id ? 'Stop' : 'Watch'}
-                </button>
-              )}
-              {c.url && (
-                <a className="small" href={c.url} target="_blank" rel="noopener noreferrer">
-                  Details
-                </a>
-              )}
+              <button className="btn btn-sm" onClick={() => openCamera(c.id)}>
+                View live
+              </button>
               {c.attribution && <span className="cam-credit small muted">{c.attribution}</span>}
             </div>
           </div>
