@@ -28,7 +28,8 @@ async function oagGet<T>(path: string, params: Record<string, string>, key: stri
   const qs = new URLSearchParams(params).toString();
   return getJson<T>(`${BASE}${path}?${qs}`, {
     timeoutMs: 10000,
-    headers: { 'Ocp-Apim-Subscription-Key': key },
+    // Both headers are sent. The live probe got HTTP 200 on /flight-instances only with both present.
+    headers: { 'Ocp-Apim-Subscription-Key': key, 'Subscription-Key': key },
   });
 }
 
